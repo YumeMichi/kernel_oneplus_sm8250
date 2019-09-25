@@ -64,7 +64,7 @@ rb_insert_augmented(struct rb_node *node, struct rb_root *root,
 }
 
 /*
- * Template for declaring augmented rbtree callbacks
+ * Template for declaring augmented rbtree callbacks (generic case)
  *
  * RBSTATIC:    'static' or empty
  * RBNAME:      name of the rb_augment_callbacks structure
@@ -107,6 +107,40 @@ RBNAME ## _rotate(struct rb_node *rb_old, struct rb_node *rb_new)	\
 RBSTATIC const struct rb_augment_callbacks RBNAME = {			\
 	RBNAME ## _propagate, RBNAME ## _copy, RBNAME ## _rotate	\
 };
+
+/*
+ * Template for declaring augmented rbtree callbacks,
+ * computing RBAUGMENTED scalar as max(RBCOMPUTE(node)) for all subtree nodes.
+ *
+ * RBSTATIC:    'static' or empty
+ * RBNAME:      name of the rb_augment_callbacks structure
+ * RBSTRUCT:    struct type of the tree nodes
+ * RBFIELD:     name of struct rb_node field within RBSTRUCT
+ * RBTYPE:      type of the RBAUGMENTED field
+ * RBAUGMENTED: name of RBTYPE field within RBSTRUCT holding data for subtree
+ * RBCOMPUTE:   name of function that returns the per-node RBTYPE scalar
+ */
+
+#define RB_DECLARE_CALLBACKS_MAX(RBSTATIC, RBNAME, RBSTRUCT, RBFIELD,	      \
+				 RBTYPE, RBAUGMENTED, RBCOMPUTE)	      \
+static inline RBTYPE RBNAME ## _compute_max(RBSTRUCT *node)		      \
+{									      \
+	RBSTRUCT *child;						      \
+	RBTYPE max = RBCOMPUTE(node);					      \
+	if (node->RBFIELD.rb_left) {					      \
+		child = rb_entry(node->RBFIELD.rb_left, RBSTRUCT, RBFIELD);   \
+		if (child->RBAUGMENTED > max)				      \
+			max = child->RBAUGMENTED;			      \
+	}								      \
+	if (node->RBFIELD.rb_right) {					      \
+		child = rb_entry(node->RBFIELD.rb_right, RBSTRUCT, RBFIELD);  \
+		if (child->RBAUGMENTED > max)				      \
+			max = child->RBAUGMENTED;			      \
+	}								      \
+	return max;							      \
+}									      \
+RB_DECLARE_CALLBACKS(RBSTATIC, RBNAME, RBSTRUCT, RBFIELD,		      \
+		     RBTYPE, RBAUGMENTED, RBNAME ## _compute_max)
 
 
 #define	RB_RED		0
