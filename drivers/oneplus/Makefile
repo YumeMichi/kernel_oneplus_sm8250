@@ -6,3 +6,4 @@ obj-y += power/
 obj-y += project-info/
 obj-y += vibrator/
 obj-y += vl53L1/
+obj-y += houston/

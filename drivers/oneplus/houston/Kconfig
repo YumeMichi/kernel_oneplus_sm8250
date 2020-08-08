@@ -1,0 +1,5 @@
+config HOUSTON
+    bool "houston"
+    default n
+    help
+      houston  If unsure, say n.
