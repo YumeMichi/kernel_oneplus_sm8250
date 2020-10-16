@@ -248,7 +248,6 @@ static void _sde_plane_set_qos_lut(struct drm_plane *plane,
 	u32 frame_rate, qos_count, fps_index = 0, lut_index, index;
 	struct sde_perf_cfg *perf;
 	struct sde_plane_state *pstate;
-	struct sde_kms *kms;
 
 	if (!plane || !fb) {
 		SDE_ERROR("invalid arguments\n");
@@ -257,11 +256,6 @@ static void _sde_plane_set_qos_lut(struct drm_plane *plane,
 
 	psde = to_sde_plane(plane);
 	pstate = to_sde_plane_state(plane->state);
-	kms = _sde_plane_get_kms(plane);
-	if (!kms) {
-		SDE_ERROR("invalid kms\n");
-		return;
-	}
 
 	if (!psde->pipe_hw || !psde->pipe_sblk || !psde->catalog) {
 		SDE_ERROR("invalid arguments\n");
@@ -288,12 +282,7 @@ static void _sde_plane_set_qos_lut(struct drm_plane *plane,
 				fb->format->format,
 				fb->modifier);
 
-		if (fmt && SDE_FORMAT_IS_LINEAR(fmt) &&
-			pstate->scaler3_cfg.enable &&
-			IS_SDE_MAJOR_MINOR_SAME(kms->catalog->hwversion,
-							 SDE_HW_VER_640))
-			lut_index = SDE_QOS_LUT_USAGE_MACROTILE_QSEED;
-		else if (fmt && SDE_FORMAT_IS_LINEAR(fmt))
+		if (fmt && SDE_FORMAT_IS_LINEAR(fmt))
 			lut_index = SDE_QOS_LUT_USAGE_LINEAR;
 		else if (pstate->scaler3_cfg.enable)
 			lut_index = SDE_QOS_LUT_USAGE_MACROTILE_QSEED;
@@ -1663,6 +1652,19 @@ void sde_plane_clear_multirect(const struct drm_plane_state *drm_state)
 	pstate->multirect_mode = SDE_SSPP_MULTIRECT_NONE;
 }
 
+//xiaoxiaohuan@OnePlus.MultiMediaService,2018/08/04, add for fingerprint
+int sde_plane_check_fingerprint_layer(const struct drm_plane_state *drm_state)
+{
+	struct sde_plane_state *pstate;
+
+	if (!drm_state)
+		return 0;
+
+	pstate = to_sde_plane_state(drm_state);
+
+	return sde_plane_get_property(pstate, PLANE_PROP_CUSTOM);
+}
+
 /**
  * multi_rect validate API allows to validate only R0 and R1 RECT
  * passing for each plane. Client of this API must not pass multiple
@@ -2855,7 +2857,8 @@ static void _sde_plane_map_prop_to_dirty_bits(void)
 	plane_prop_array[PLANE_PROP_INFO] =
 	plane_prop_array[PLANE_PROP_ALPHA] =
 	plane_prop_array[PLANE_PROP_INPUT_FENCE] =
-	plane_prop_array[PLANE_PROP_BLEND_OP] = 0;
+	plane_prop_array[PLANE_PROP_BLEND_OP] =
+    plane_prop_array[PLANE_PROP_CUSTOM]= 0;
 
 	plane_prop_array[PLANE_PROP_FB_TRANSLATION_MODE] =
 		SDE_PLANE_DIRTY_FB_TRANSLATION_MODE;
@@ -3553,6 +3556,10 @@ static void _sde_plane_install_properties(struct drm_plane *plane,
 
 	msm_property_install_range(&psde->property_info, "zpos",
 		0x0, 0, zpos_max, zpos_def, PLANE_PROP_ZPOS);
+
+    //xiaoxiaohuan@OnePlus.MultiMediaService,2018/08/04, add for fingerprint
+	msm_property_install_range(&psde->property_info, "PLANE_CUST",
+			0x0, 0, INT_MAX, 0, PLANE_PROP_CUSTOM);
 
 	msm_property_install_range(&psde->property_info, "alpha",
 		0x0, 0, 255, 255, PLANE_PROP_ALPHA);
