@@ -2964,7 +2964,7 @@ ssize_t notify_dim_store(struct device *dev,
 		return count;
 	oneplus_dim_status = dim_status;
 	oneplus_dimlayer_hbm_enable = oneplus_dim_status != 0;
-	pr_err("notify dim %d,aod = %d press= %d aod_hide =%d\n",
+	pr_debug("notify dim %d,aod = %d press= %d aod_hide =%d\n",
 		oneplus_dim_status, dsi_display->panel->aod_status, oneplus_onscreenfp_status, aod_layer_hide);
 	if (oneplus_dim_status == 1 && HBM_flag) {
 		rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_HBM_ON_5);
@@ -2972,7 +2972,7 @@ ssize_t notify_dim_store(struct device *dev,
 			pr_err("failed to send DSI_CMD_SET_HBM_ON_5 cmds, rc=%d\n", rc);
 			return rc;
 		}
-		pr_err("Notify dim not commit,send DSI_CMD_SET_HBM_ON_5 cmds\n");
+		pr_debug("Notify dim not commit,send DSI_CMD_SET_HBM_ON_5 cmds\n");
 		return count;
 	}
 	drm_modeset_lock_all(drm_dev);
