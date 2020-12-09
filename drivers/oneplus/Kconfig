@@ -1,0 +1,7 @@
+source "drivers/oneplus/boot-mode/Kconfig"
+source "drivers/oneplus/input/Kconfig"
+source "drivers/oneplus/tri-state-key/Kconfig"
+source "drivers/oneplus/power/Kconfig"
+source "drivers/oneplus/project-info/Kconfig"
+source "drivers/oneplus/vibrator/Kconfig"
+source "drivers/oneplus/vl53L1/Kconfig"

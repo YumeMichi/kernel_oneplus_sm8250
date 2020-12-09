@@ -1,0 +1,5 @@
+config PROJECT_INFO
+    bool "detect project info"
+    default n
+    help
+      detect projcet info  If unsure, say n.
