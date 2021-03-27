@@ -663,7 +663,8 @@ static int map_lookup_elem(union bpf_attr *attr)
 	int ufd = attr->map_fd;
 	struct bpf_map *map;
 	void *key, *value, *ptr;
-	char value_onstack[32];
+	u8 key_onstack[SZ_16] __aligned(sizeof(long));
+	u8 value_onstack[SZ_64] __aligned(sizeof(long));
 	u32 value_size;
 	struct fd f;
 	int err;
@@ -681,10 +682,18 @@ static int map_lookup_elem(union bpf_attr *attr)
 		goto err_put;
 	}
 
-	key = memdup_user(ukey, map->key_size);
-	if (IS_ERR(key)) {
-		err = PTR_ERR(key);
-		goto err_put;
+	if (map->key_size <= sizeof(key_onstack)) {
+		key = key_onstack;
+		if (copy_from_user(key, ukey, map->key_size)) {
+			err = -EFAULT;
+			goto err_put;
+		}
+	} else {
+		key = memdup_user(ukey, map->key_size);
+		if (IS_ERR(key)) {
+			err = PTR_ERR(key);
+			goto err_put;
+		}
 	}
 
 	if (map->map_type == BPF_MAP_TYPE_PERCPU_HASH ||
@@ -696,10 +705,10 @@ static int map_lookup_elem(union bpf_attr *attr)
 	else
 		value_size = map->value_size;
 
-	if (likely(value_size <= sizeof(value_onstack))) {
+	err = -ENOMEM;
+	if (value_size <= sizeof(value_onstack)) {
 		value = value_onstack;
 	} else {
-		err = -ENOMEM;
 		value = kmalloc(value_size, GFP_USER | __GFP_NOWARN);
 		if (!value)
 			goto free_key;
@@ -750,10 +759,11 @@ done:
 	err = 0;
 
 free_value:
-	if (unlikely(value != value_onstack))
+	if (value != value_onstack)
 		kfree(value);
 free_key:
-	kfree(key);
+	if (key != key_onstack)
+		kfree(key);
 err_put:
 	fdput(f);
 	return err;
@@ -779,7 +789,8 @@ static int map_update_elem(union bpf_attr *attr)
 	int ufd = attr->map_fd;
 	struct bpf_map *map;
 	void *key, *value;
-	char value_onstack[16];
+	u8 key_onstack[SZ_16] __aligned(sizeof(long));
+	u8 value_onstack[SZ_64] __aligned(sizeof(long));
 	u32 value_size;
 	struct fd f;
 	int err;
@@ -797,10 +808,18 @@ static int map_update_elem(union bpf_attr *attr)
 		goto err_put;
 	}
 
-	key = memdup_user(ukey, map->key_size);
-	if (IS_ERR(key)) {
-		err = PTR_ERR(key);
-		goto err_put;
+	if (map->key_size <= sizeof(key_onstack)) {
+		key = key_onstack;
+		if (copy_from_user(key, ukey, map->key_size)) {
+			err = -EFAULT;
+			goto err_put;
+		}
+	} else {
+		key = memdup_user(ukey, map->key_size);
+		if (IS_ERR(key)) {
+			err = PTR_ERR(key);
+			goto err_put;
+		}
 	}
 
 	if (map->map_type == BPF_MAP_TYPE_PERCPU_HASH ||
@@ -810,7 +829,7 @@ static int map_update_elem(union bpf_attr *attr)
 	else
 		value_size = map->value_size;
 
-	if (likely(value_size <= sizeof(value_onstack))) {
+	if (value_size <= sizeof(value_onstack)) {
 		value = value_onstack;
 	} else {
 		err = -ENOMEM;
@@ -868,10 +887,11 @@ static int map_update_elem(union bpf_attr *attr)
 	maybe_wait_bpf_programs(map);
 out:
 free_value:
-	if (unlikely(value != value_onstack))
+	if (value != value_onstack)
 		kfree(value);
 free_key:
-	kfree(key);
+	if (key != key_onstack)
+		kfree(key);
 err_put:
 	fdput(f);
 	return err;
@@ -886,6 +906,7 @@ static int map_delete_elem(union bpf_attr *attr)
 	struct bpf_map *map;
 	struct fd f;
 	void *key;
+	u8 key_onstack[SZ_16] __aligned(sizeof(long));
 	int err;
 
 	if (CHECK_ATTR(BPF_MAP_DELETE_ELEM))
@@ -901,10 +922,18 @@ static int map_delete_elem(union bpf_attr *attr)
 		goto err_put;
 	}
 
-	key = memdup_user(ukey, map->key_size);
-	if (IS_ERR(key)) {
-		err = PTR_ERR(key);
-		goto err_put;
+	if (map->key_size <= sizeof(key_onstack)) {
+		key = key_onstack;
+		if (copy_from_user(key, ukey, map->key_size)) {
+			err = -EFAULT;
+			goto err_put;
+		}
+	} else {
+		key = memdup_user(ukey, map->key_size);
+		if (IS_ERR(key)) {
+			err = PTR_ERR(key);
+			goto err_put;
+		}
 	}
 
 	if (bpf_map_is_dev_bound(map)) {
@@ -921,7 +950,8 @@ static int map_delete_elem(union bpf_attr *attr)
 	preempt_enable();
 	maybe_wait_bpf_programs(map);
 out:
-	kfree(key);
+	if (key != key_onstack)
+		kfree(key);
 err_put:
 	fdput(f);
 	return err;
@@ -937,7 +967,8 @@ static int map_get_next_key(union bpf_attr *attr)
 	int ufd = attr->map_fd;
 	struct bpf_map *map;
 	void *key, *next_key;
-	char next_key_onstack[48];
+	u8 key_onstack[SZ_16] __aligned(sizeof(long));
+	u8 next_key_onstack[SZ_64] __aligned(sizeof(long));
 	struct fd f;
 	int err;
 
@@ -955,19 +986,27 @@ static int map_get_next_key(union bpf_attr *attr)
 	}
 
 	if (ukey) {
-		key = memdup_user(ukey, map->key_size);
-		if (IS_ERR(key)) {
-			err = PTR_ERR(key);
-			goto err_put;
+		if (map->key_size <= sizeof(key_onstack)) {
+			key = key_onstack;
+			if (copy_from_user(key, ukey, map->key_size)) {
+				err = -EFAULT;
+				goto err_put;
+			}
+		} else {
+			key = memdup_user(ukey, map->key_size);
+			if (IS_ERR(key)) {
+				err = PTR_ERR(key);
+				goto err_put;
+			}
 		}
 	} else {
 		key = NULL;
 	}
 
-	if (likely(map->key_size <= sizeof(next_key_onstack))) {
+	err = -ENOMEM;
+	if (map->key_size <= sizeof(next_key_onstack)) {
 		next_key = next_key_onstack;
 	} else {
-		err = -ENOMEM;
 		next_key = kmalloc(map->key_size, GFP_USER);
 		if (!next_key)
 			goto free_key;
@@ -992,10 +1031,11 @@ out:
 	err = 0;
 
 free_next_key:
-	if (unlikely(next_key != next_key_onstack))
+	if (next_key != next_key_onstack)
 		kfree(next_key);
 free_key:
-	kfree(key);
+	if (key != key_onstack)
+		kfree(key);
 err_put:
 	fdput(f);
 	return err;
