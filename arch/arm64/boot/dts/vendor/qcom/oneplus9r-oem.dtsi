@@ -7,6 +7,11 @@
 		project_info = <1>;
 	};
 
+	bootloader_log {
+		compatible = "bootloader_log";
+		linux,contiguous-region = <&bootloader_log_mem>;
+	};
+
 	fingerprint_detect:fingerprint_detect {
 		oneplus,19805;
 		compatible = "oneplus,fpdetect";
@@ -89,6 +94,23 @@
 		pinctrl-0 = <&downhall_tri_state_key_active>;
 	};
 };
+
+&qupv3_se2_i2c {
+       status = "ok";
+       qcom,clk-freq-out = <400000>;
+       pixelworks@26 {  //i2c: 22, i3c: 26
+               status = "ok";
+               compatible = "pixelworks,iris";
+               reg = <0x26>;
+        };
+
+       pixelworks@22 {  //i2c: 22, i3c: 26
+               status = "ok";
+               compatible = "pixelworks,iris-i2c";
+               reg = <0x22>;
+        };
+};
+
 
 &tlmm {
 	uphall_tri_state_key_active: uphall_tri_state_key_active {
@@ -249,7 +271,6 @@
 		panel = <&dsi_boe_nt37800_fhd_dsc_cmd &dsi_samsung_dd305_dsc_cmd &dsi_samsung_amb655x_dsc_cmd>;
 	};
 };
-
 &qupv3_se13_i2c {
 	status = "ok";
 	goodix-gt9897@5D {
@@ -516,7 +537,18 @@
 };
 
 &reserved_memory {
-	/* After cdsp_secure_heap we add a offset to ignore change address need reconfig */
+
+	bootloader_log_mem: bootloader_log_mem@0x9FFF7000 {
+		reg = <0 0x9FFF7000 0 0x00009000>;
+		label = "bootloader_log_mem";
+	};
+
+	param_mem: param_mem@ac200000 {
+		reg = <0 0xAC200000 0 0x00100000>;
+		label = "param_mem";
+	};
+
+	/*after cdsp_secure_heap we add a offset to ignore change address need reconfig*/
 	ramoops: ramoops@0xA9800000 {
 		compatible = "ramoops";
 		reg = <0 0xA9800000 0 0x00400000>;
@@ -526,6 +558,11 @@
 		pmsg-size=	   <0x200000>;
 		devinfo-size=  <0x01000>;
 		ecc-size=	   <0x0>;
+	};
+
+	mtp_mem: mtp_mem@ac300000 {
+		reg = <0 0xAC300000 0 0x00B00000>;
+		label = "mtp_mem";
 	};
 };
 
@@ -552,6 +589,41 @@
 	};
 };
 
+&qupv3_se12_2uart {
+    compatible = "qcom,msm-geni-console-oem";
+};
+&soc {
+     oem_serial_pinctrl {
+        compatible = "oem,oem_serial_pinctrl";
+        pinctrl-names = "uart_pinctrl_active","uart_pinctrl_deactive";
+        pinctrl-0 = <&qupv3_se12_2uart_oem_sleep>;
+        pinctrl-1 = <&qupv3_se12_2uart_oem_sleep>;
+    };
+
+	oem_aboard_check:oem_aboard_check {
+		compatible = "oem,aboard";
+		interrupt-parent = <&tlmm>;
+		oem,aboard-gpio-0 = <&tlmm 26 0>;
+		pinctrl-names = "oem_aboard_active","oem_aboard_sleep";
+		pinctrl-0 = <&ab_id0_active>;
+        pinctrl-1 = <&ab_id0_sleep>;
+	};
+
+	oem_rf_cable:oem_rf_cable {
+		compatible = "oem,rf_cable";
+		interrupt-parent = <&tlmm>;
+		rf,cable-gpio-0 = <&tlmm 109 0>;
+		rf,cable-gpio-1 = <&tlmm 162 0>;
+		rf,cable-gpio-2 = <&tlmm 175 0>;
+		rf,cable-gpio-3 = <&tlmm 129 0>;
+		rf,cable-support-timer = <0>;
+		oem,rf_uevent_feature_enable;
+		pinctrl-names = "oem_rf_cable_active";
+		pinctrl-0 = <&rf_cable_ant0_active &rf_cable_ant1_active &rf_cable_ant2_active &rf_cable_ant3_active>;
+	};
+
+};
+
 &tlmm {
     ab_id0_active: ab_id0_active {
         mux {
@@ -573,6 +645,50 @@
             pins = "gpio26";
             drive-strength = <2>;
             bias-disable;
+        };
+    };
+    rf_cable_ant0_active: rf_cable_ant0_active {
+        mux {
+            pins = "gpio109";
+            function = "gpio";
+        };
+        config {
+            pins = "gpio109";
+            drive-strength = <2>;
+            bias-pull-up;
+        };
+    };
+    rf_cable_ant1_active: rf_cable_ant1_active {
+        mux {
+            pins = "gpio162";
+            function = "gpio";
+        };
+        config {
+            pins = "gpio162";
+            drive-strength = <2>;
+            bias-pull-up;
+        };
+    };
+    rf_cable_ant2_active: rf_cable_ant2_active {
+        mux {
+            pins = "gpio175";
+            function = "gpio";
+        };
+        config {
+            pins = "gpio175";
+            drive-strength = <2>;
+            bias-pull-up;
+        };
+    };
+    rf_cable_ant3_active: rf_cable_ant3_active {
+        mux {
+            pins = "gpio129";
+            function = "gpio";
+        };
+        config {
+            pins = "gpio129";
+            drive-strength = <2>;
+            bias-pull-up;
         };
     };
     qupv3_se12_2uart_oem_sleep: qupv3_se12_2uart_oem_sleep {
@@ -1198,7 +1314,6 @@
 	qca,bt-vdd-dig-voltage-level = <950000 950000>;
 	qca,bt-vdd-rfa1-voltage-level = <1900000 2040000>;
 };
-
 
 &usb_qmp_dp_phy {
 	vdd-supply = <&pm8150_l18>;
