@@ -91,6 +91,22 @@
 	};
 };
 
+&qupv3_se2_i2c {
+       status = "ok";
+       qcom,clk-freq-out = <400000>;
+       pixelworks@26 {  //i2c: 22, i3c: 26
+               status = "ok";
+               compatible = "pixelworks,iris";
+               reg = <0x26>;
+        };
+
+       pixelworks@22 {  //i2c: 22, i3c: 26
+               status = "ok";
+               compatible = "pixelworks,iris-i2c";
+               reg = <0x22>;
+        };
+};
+
 &tlmm {
 	uphall_tri_state_key_active: uphall_tri_state_key_active {
 		mux {

@@ -2624,6 +2624,12 @@
 	qcom,mdss-dsi-bl-max-level = <1023>;
 	qcom,platform-te-gpio = <&tlmm 66 0>;
 	qcom,platform-reset-gpio = <&tlmm 75 0>;
+	/* #if defined(CONFIG_PXLW_IRIS5) */
+	qcom,platform-iris-reset-gpio = <&tlmm 174 0>;
+	qcom,platform-analog-bypass-gpio = <&tlmm 173 0>;
+	qcom,platform-analog-bypass-status-gpio = <&tlmm 112 0>;
+	//qcom,platform-iris-vdd-gpio = <&tlmm 175 0>;
+	/* #endif */
 };
 
 &soc {
