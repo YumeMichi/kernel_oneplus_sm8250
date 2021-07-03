@@ -12,8 +12,6 @@
 #include "dsi_drm.h"
 #include "sde_trace.h"
 #include "sde_dbg.h"
-#include "sde_encoder.h"
-#include "sde_dbg.h"
 
 #define to_dsi_bridge(x)     container_of((x), struct dsi_bridge, base)
 #define to_dsi_state(x)      container_of((x), struct dsi_connector_state, base)
@@ -343,8 +341,6 @@ static bool dsi_bridge_mode_fixup(struct drm_bridge *bridge,
 	struct dsi_display *display;
 	struct dsi_display_mode dsi_mode, cur_dsi_mode, *panel_dsi_mode;
 	struct drm_crtc_state *crtc_state;
-	bool clone_mode = false;
-	struct drm_encoder *encoder;
 
 	crtc_state = container_of(mode, struct drm_crtc_state, mode);
 
@@ -407,14 +403,6 @@ static bool dsi_bridge_mode_fixup(struct drm_bridge *bridge,
 			DSI_ERR("[%s] seamless mode mismatch failure rc=%d\n",
 				c_bridge->display->name, rc);
 			return false;
-		}
-
-		drm_for_each_encoder(encoder, crtc_state->crtc->dev) {
-			if (encoder->crtc != crtc_state->crtc)
-				continue;
-
-			if (sde_encoder_in_clone_mode(encoder))
-				clone_mode = true;
 		}
 
 		/* No panel mode switch when drm pipeline is changing */
@@ -868,9 +856,6 @@ int dsi_connector_get_modes(struct drm_connector *connector, void *data,
 	for (i = 0; i < count; i++) {
 		struct drm_display_mode *m;
 
-		if (modes[i].splash_dms)
-			modes[i].dsi_mode_flags |= DSI_MODE_FLAG_DMS;
-
 		memset(&drm_mode, 0x0, sizeof(drm_mode));
 		dsi_convert_to_drm_mode(&modes[i], &drm_mode);
 		m = drm_mode_duplicate(connector->dev, &drm_mode);
@@ -893,10 +878,6 @@ int dsi_connector_get_modes(struct drm_connector *connector, void *data,
 			m->type |= DRM_MODE_TYPE_PREFERRED;
 		}
 		drm_mode_probed_add(connector, m);
-
-		if (modes[i].splash_dms)
-			drm_set_preferred_mode(
-				connector, m->hdisplay, m->vdisplay);
 	}
 
 	rc = dsi_drm_update_edid_name(&edid, display->panel->name);
