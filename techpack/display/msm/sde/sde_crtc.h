@@ -35,6 +35,14 @@
 /* Expand it to 2x for handling atleast 2 connectors safely */
 #define SDE_CRTC_FRAME_EVENT_SIZE	(4 * 2)
 
+#define DSI_PANEL_SAMSUNG_S6E3HC2 0
+#define DSI_PANEL_SAMSUNG_S6E3FC2X01 1
+#define DSI_PANEL_SAMSUNG_SOFEF03F_M 2
+#define DSI_PANEL_SAMSUNG_ANA6705 3
+#define DSI_PANEL_SAMSUNG_ANA6706 4
+
+extern char dsi_panel_name;
+
 /**
  * enum sde_session_type: session type
  * @SDE_SECURE_UI_SESSION:     secure UI usecase
@@ -431,6 +439,9 @@ struct sde_crtc_state {
 
 	struct sde_core_perf_params new_perf;
 	int secure_session;
+	bool fingerprint_mode;
+	bool fingerprint_pressed;
+	struct sde_hw_dim_layer *fingerprint_dim_layer;
 };
 
 enum sde_crtc_irq_state {
