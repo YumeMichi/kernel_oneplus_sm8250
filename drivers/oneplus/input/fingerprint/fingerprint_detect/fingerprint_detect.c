@@ -217,6 +217,7 @@ static struct platform_driver fingerprint_detect_driver = {
 		.name		= "fingerprint_detect",
 		.owner		= THIS_MODULE,
 		.of_match_table = fingerprint_detect_of_match,
+		.probe_type     = PROBE_PREFER_ASYNCHRONOUS,
 	},
 	.probe = fingerprint_detect_probe,
 };

@@ -3514,6 +3514,7 @@ static struct i2c_driver tp_i2c_driver =
 		.owner = THIS_MODULE,
 		.of_match_table = tp_match_table,
 		.pm = &tp_pm_ops,
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 };
 /******************* End of I2C Driver and It's dev_pm_ops***********************/
