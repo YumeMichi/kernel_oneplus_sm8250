@@ -756,7 +756,6 @@
 		qcom,bark-time = <22000>;
 		//endif /*OPLUS_BUG_STABILITY*/
 		qcom,pet-time = <9360>;
-		qcom,wakeup-enable;
 		qcom,ipi-ping;
 	};
 
