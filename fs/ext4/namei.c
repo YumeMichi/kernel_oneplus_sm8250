@@ -3999,8 +3999,8 @@ static int ext4_rename(struct inode *old_dir, struct dentry *old_dentry,
 end_rename:
 	if (whiteout) {
 		if (retval) {
-			ext4_setent(handle, &old,
-				old.inode->i_ino, old_file_type);
+			ext4_resetent(handle, &old,
+				      old.inode->i_ino, old_file_type);
 			drop_nlink(whiteout);
 			ext4_orphan_add(handle, whiteout);
 		}
