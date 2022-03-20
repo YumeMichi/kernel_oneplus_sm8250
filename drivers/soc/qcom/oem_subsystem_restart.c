@@ -21,13 +21,15 @@ static ssize_t proc_restart_level_all_write(struct file *p_file,
     char  *subsysname [] = {
         "ipa_fws",
         "cvpss",
+        "ipa_uc",
         "wlan",
-        "trustedvm",
-        "a660_zap",
+        "a650_zap",
         "venus",
+        "esoc0",
         "modem",
         "adsp",
         "cdsp",
+        "npu",
         "slpi",
         "spss"
     };
