@@ -34,6 +34,7 @@
 #include <asm/current.h>
 #include <linux/timer.h>
 
+#include "oem_subsystem_restart.h"
 #include "peripheral-loader.h"
 
 #define DISABLE_SSR 0x9889deed
@@ -2002,6 +2003,8 @@ static int __init subsys_restart_init(void)
 	if (ret)
 		goto err_soc;
 
+	oem_restart_modem_init();
+
 	return 0;
 
 err_soc:
@@ -2013,6 +2016,8 @@ err_bus:
 	return ret;
 }
 arch_initcall(subsys_restart_init);
+
+#include "oem_subsystem_restart.c"
 
 MODULE_DESCRIPTION("Subsystem Restart Driver");
 MODULE_LICENSE("GPL v2");
