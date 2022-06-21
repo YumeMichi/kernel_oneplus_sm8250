@@ -472,7 +472,7 @@ err_class_create:
 	return rc;
 }
 
-void __exit oplus_display_panel_exit(void)
+static void __exit oplus_display_panel_exit(void)
 {
 	pr_info("%s\n", __func__);
 
