@@ -43,10 +43,18 @@
 #define TX_MACRO_ADC_MUX_CFG_OFFSET 0x8
 #define TX_MACRO_ADC_MODE_CFG0_SHIFT 1
 
+#ifndef OPLUS_BUG_STABILITY
 #define TX_MACRO_DMIC_UNMUTE_DELAY_MS	40
+#else /* OPLUS_BUG_STABILITY */
+#define TX_MACRO_DMIC_UNMUTE_DELAY_MS	50
+#endif /* OPLUS_BUG_STABILITY */
 #define TX_MACRO_AMIC_UNMUTE_DELAY_MS	100
 #define TX_MACRO_DMIC_HPF_DELAY_MS	300
+#ifndef OPLUS_BUG_STABILITY
 #define TX_MACRO_AMIC_HPF_DELAY_MS	300
+#else /* OPLUS_BUG_STABILITY */
+#define TX_MACRO_AMIC_HPF_DELAY_MS	500
+#endif /* OPLUS_BUG_STABILITY */
 
 static int tx_unmute_delay = TX_MACRO_DMIC_UNMUTE_DELAY_MS;
 module_param(tx_unmute_delay, int, 0664);
@@ -234,11 +242,19 @@ static int tx_macro_mclk_enable(struct tx_macro_priv *tx_priv,
 		}
 		bolero_clk_rsc_fs_gen_request(tx_priv->dev,
 					true);
+		#ifdef OPLUS_BUG_STABILITY
 		regcache_mark_dirty(regmap);
 		regcache_sync_region(regmap,
 				TX_START_OFFSET,
 				TX_MAX_OFFSET);
+		#endif /* OPLUS_BUG_STABILITY */
 		if (tx_priv->tx_mclk_users == 0) {
+			#ifndef OPLUS_BUG_STABILITY
+			regcache_mark_dirty(regmap);
+			regcache_sync_region(regmap,
+					TX_START_OFFSET,
+					TX_MAX_OFFSET);
+			#endif /* OPLUS_BUG_STABILITY */
 			/* 9.6MHz MCLK, set value 0x00 if other frequency */
 			regmap_update_bits(regmap,
 				BOLERO_CDC_TX_TOP_CSR_FREQ_MCLK, 0x01, 0x01);
