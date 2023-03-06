@@ -527,7 +527,7 @@
 
                 platform_support_project_dir = <19161 19161>;
 
-                platform_support_project_commandline = "mdss_dsi_oplus19161samsung_amb655uv01_1080_2400_cmd","mdss_dsi_oplus19161samsung_amb655uv01_1080_2400_cmd";
+                platform_support_project_commandline = "mdss_dsi_oppo19161samsung_amb655uv01_1080_2400_cmd","mdss_dsi_oppo19161samsung_amb655uv01_1080_2400_cmd";
 
 		touchpanel,elimination-range = <20 200 200>;
 		prevention,no_handle_para = <0 0 0>;

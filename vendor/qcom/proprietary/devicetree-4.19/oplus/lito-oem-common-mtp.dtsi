@@ -1267,6 +1267,7 @@
 		fingerprint_underscreen_support;
 		headset_pump_support;
 		irq_need_dev_resume_ok;
+		exception_upload_support;
 		health_monitor_v2_support;
 		high_resolution_support;
 		//esd_handle_support;

@@ -1660,6 +1660,7 @@
 
 		qcom,curr_cp_to_charger = <400>;
 		qcom,support_airsvooc = <1>;
+		qcom,phone_id = <0x05>;
 
 		qcom,wireless_max_chg_vol_mv = <15000>;
 		qcom,wireless_max_chg_current_ma = <3600>;
