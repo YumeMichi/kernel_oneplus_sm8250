@@ -3311,6 +3311,7 @@ static void _sde_encoder_input_handler_register(
 	}
 }
 
+#if 0
 static void _sde_encoder_input_handler_unregister(
 		struct drm_encoder *drm_enc)
 {
@@ -3325,6 +3326,7 @@ static void _sde_encoder_input_handler_unregister(
 	}
 
 }
+#endif
 
 static int _sde_encoder_input_handler(
 		struct sde_encoder_virt *sde_enc)
