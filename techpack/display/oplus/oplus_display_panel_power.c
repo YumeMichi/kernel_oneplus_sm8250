@@ -11,12 +11,6 @@
 **  Li.Sheng       2020/06/13        1.0           Build this moudle
 ******************************************************************/
 #include "oplus_display_panel_power.h"
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-#include <video/mipi_display.h>
-#include "iris/dsi_iris5_api.h"
-#include "iris/dsi_iris5_lightup.h"
-#include "iris/dsi_iris5_loop_back.h"
-#endif
 
 PANEL_VOLTAGE_BAK panel_vol_bak[PANEL_VOLTAGE_ID_MAX] = {{0}, {0}, {2, 0, 1, 2, ""}};
 u32 panel_pwr_vg_base = 0;
@@ -271,16 +265,8 @@ int oplus_display_panel_regulator_control(void *data) {
 	}
 	temp_display = get_main_display();
 	if(temp_save == 0) {
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-		if (iris_is_chip_supported())
-			iris_control_pwr_regulator(false);
-#endif
 		dsi_pwr_enable_regulator(&temp_display->panel->power_info, false);
 	} else if (temp_save == 1) {
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-		if (iris_is_chip_supported())
-			iris_control_pwr_regulator(true);
-#endif
 		dsi_pwr_enable_regulator(&temp_display->panel->power_info, true);
 	}
 

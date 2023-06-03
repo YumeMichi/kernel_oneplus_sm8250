@@ -112,10 +112,6 @@
 extern u32 g_oplus_save_pcc;
 #endif
 
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-int igc_lut_update = 0;
-#endif
-
 enum ltm_vlut_ops_bitmask {
 	ltm_unsharp = BIT(0),
 	ltm_dither = BIT(1),
@@ -1004,11 +1000,7 @@ void reg_dmav1_setup_dspp_igcv31(struct sde_hw_dspp *ctx, void *cfg)
 	struct sde_hw_dspp *dspp_list[DSPP_MAX];
 	struct dsi_display *dsi_display;
 	int rc, i = 0, j = 0;
-#if defined(OPLUS_FEATURE_PW_4096) || defined(OPLUS_FEATURE_PXLW_IRIS5)
-	u32 *addr[IGC_TBL_NUM], *data;
-#else
 	u32 *addr[IGC_TBL_NUM];
-#endif
 	u32 offset = 0;
 	u32 reg;
 	u32 index, num_of_mixers, dspp_sel, blk = 0;
@@ -1069,13 +1061,6 @@ void reg_dmav1_setup_dspp_igcv31(struct sde_hw_dspp *ctx, void *cfg)
 	addr[0] = lut_cfg->c0;
 	addr[1] = lut_cfg->c1;
 	addr[2] = lut_cfg->c2;
-#if defined(OPLUS_FEATURE_PW_4096) || defined(OPLUS_FEATURE_PXLW_IRIS5)
-	data = kzalloc((IGC_TBL_LEN + 1) * sizeof(u32), GFP_KERNEL);
-	if (!data) {
-		DRM_ERROR("unable to allocate buffer\n");
-		return;
-	}
-#endif
 
 	for (i = 0; i < IGC_TBL_NUM; i++) {
 		offset = IGC_C0_OFF + (i * sizeof(u32));
@@ -1086,29 +1071,15 @@ void reg_dmav1_setup_dspp_igcv31(struct sde_hw_dspp *ctx, void *cfg)
 			if (j == 0)
 				addr[i][j] |= IGC_INDEX_UPDATE;
 		}
-#if defined(OPLUS_FEATURE_PW_4096) || defined(OPLUS_FEATURE_PXLW_IRIS5)
-		memcpy(data, addr[i], IGC_TBL_LEN * sizeof(u32));
-		data[IGC_TBL_LEN] = data[IGC_TBL_LEN - 1];
-		REG_DMA_SETUP_OPS(dma_write_cfg, offset, data,
-			(IGC_TBL_LEN + 1) * sizeof(u32),
-			REG_BLK_WRITE_INC, 0, 0, 0);
-#else
 		REG_DMA_SETUP_OPS(dma_write_cfg, offset, addr[i],
 			IGC_TBL_LEN * sizeof(u32),
 			REG_BLK_WRITE_INC, 0, 0, 0);
-#endif
 		rc = dma_ops->setup_payload(&dma_write_cfg);
 		if (rc) {
 			DRM_ERROR("lut write failed ret %d\n", rc);
-#if defined(OPLUS_FEATURE_PW_4096) || defined(OPLUS_FEATURE_PXLW_IRIS5)
-			kfree(data);
-#endif
 			return;
 		}
 	}
-#if defined(OPLUS_FEATURE_PW_4096) || defined(OPLUS_FEATURE_PXLW_IRIS5)
-	kfree(data);
-#endif
 	REG_DMA_INIT_OPS(dma_write_cfg, blk, IGC, dspp_buf[IGC][ctx->idx]);
 
 	REG_DMA_SETUP_OPS(dma_write_cfg, 0, NULL, 0, HW_BLK_SELECT, 0, 0, 0);
@@ -1158,10 +1129,6 @@ void reg_dmav1_setup_dspp_igcv31(struct sde_hw_dspp *ctx, void *cfg)
 		DRM_ERROR("setting opcode failed ret %d\n", rc);
 		return;
 	}
-
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-	igc_lut_update = 1;
-#endif
 
 	REG_DMA_SETUP_KICKOFF(kick_off, hw_cfg->ctl, dspp_buf[IGC][ctx->idx],
 			REG_DMA_WRITE, DMA_CTL_QUEUE0, WRITE_IMMEDIATE);

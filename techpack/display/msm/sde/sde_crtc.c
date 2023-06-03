@@ -59,10 +59,6 @@ extern int oplus_request_power_status;
 #include "oplus_adfr.h"
 #endif
 
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-extern int igc_lut_update;
-#endif
-
 #define SDE_PSTATES_MAX (SDE_STAGE_MAX * 4)
 #define SDE_MULTIRECT_PLANE_MAX (SDE_STAGE_MAX * 2)
 
@@ -4811,20 +4807,6 @@ static int sde_crtc_onscreenfinger_atomic_check(struct sde_crtc_state *cstate,
 		}
 
 		if (dimlayer_hbm && (oplus_get_panel_brightness() != 0)) {
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-			struct dsi_display *display = get_main_display();
-
-			if (display == NULL || display->panel == NULL)
-				return false;
-
-			if ((!strcmp(display->panel->oplus_priv.vendor_name, "AMB655UV01") && (display->panel->oplus_priv.is_oplus_project))) {
-				//if pw set panel brightness,need delay hbm on&dimming layer to next frame.
-				if(igc_lut_update == 1) {
-					igc_lut_update = 0;
-					return 0;
-				}
-			}
-#endif
 			cstate->fingerprint_mode = true;
 		}
 		else
