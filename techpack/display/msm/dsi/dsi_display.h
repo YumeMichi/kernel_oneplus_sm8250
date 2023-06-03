@@ -275,11 +275,6 @@ struct dsi_display {
 
 	u32 te_source;
 	u32 clk_gating_config;
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-	u32 off;
-	u32 cnt;
-	u8 cmd_data_type;
-#endif
 	bool queue_cmd_waits;
 	struct workqueue_struct *dma_cmd_workq;
 

@@ -45,12 +45,6 @@
 #include "oplus_onscreenfingerprint.h"
 #include "oplus_dc_diming.h"
 #endif
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-#include "iris/dsi_iris5_api.h"
-#elif defined(CONFIG_PXLW_SOFT_IRIS)
-#include "iris/dsi_iris5_api.h"
-#include "iris/dsi_iris5.h"
-#endif
 
 #ifdef OPLUS_FEATURE_ADFR
 #include "oplus_adfr.h"
@@ -315,9 +309,6 @@ struct sde_encoder_virt {
 	struct kthread_work esd_trigger_work;
 	struct input_handler *input_handler;
 	bool input_handler_registered;
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-	struct kthread_work disable_autorefresh_work;
-#endif
 	struct msm_display_topology topology;
 	bool vblank_enabled;
 	bool idle_pc_restore;
@@ -5062,11 +5053,6 @@ int oplus_backlight_wait_vsync(struct drm_encoder *drm_enc)
 		return -ENOLINK;
 	}
 
-	if (sde_encoder_is_disabled(drm_enc)) {
-		SDE_ERROR("%s encoder is disabled", __func__);
-		return -EIO;
-	}
-
 	//mutex_unlock(&panel->panel_lock);
 	sde_encoder_wait_for_event(drm_enc,  MSM_ENC_VBLANK);
 	//mutex_lock(&panel->panel_lock);
@@ -5149,14 +5135,6 @@ int sde_encoder_prepare_for_kickoff(struct drm_encoder *drm_enc,
 
 	SDE_DEBUG_ENC(sde_enc, "\n");
 	SDE_EVT32(DRMID(drm_enc));
-
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-	iris_sde_prepare_for_kickoff(sde_enc->num_phys_encs,
-			sde_enc->phys_encs[0]);
-#elif defined(CONFIG_PXLW_SOFT_IRIS)
-	if (sde_enc->num_phys_encs > 0)
-		iris_sync_panel_brightness(1, sde_enc->phys_encs[0]);
-#endif
 
 #ifdef OPLUS_BUG_STABILITY
 	if (sde_enc->cur_master) {
@@ -5253,16 +5231,6 @@ int sde_encoder_prepare_for_kickoff(struct drm_encoder *drm_enc,
 	if (needs_hw_reset)
 		sde_encoder_needs_hw_reset(drm_enc);
 
-#if 0
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-	iris_sde_prepare_for_kickoff(sde_enc->num_phys_encs,
-			sde_enc->phys_encs[0]);
-
-#elif defined(CONFIG_PXLW_SOFT_IRIS)
-	if (sde_enc->num_phys_encs > 0)
-		iris_sync_panel_brightness(1, sde_enc->phys_encs[0]);
-#endif
-#endif
 	_sde_encoder_update_master(drm_enc, params);
 
 	_sde_encoder_update_roi(drm_enc);
@@ -5396,14 +5364,6 @@ void sde_encoder_kickoff(struct drm_encoder *drm_enc, bool is_error)
 	}
 #endif /*OPLUS_BUG_STABILITY*/
 
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-	iris_sde_encoder_kickoff(sde_enc->num_phys_encs,
-			sde_enc->phys_encs[0]);
-#elif defined(CONFIG_PXLW_SOFT_IRIS)
-	if (sde_enc->num_phys_encs > 0)
-		iris_sync_panel_brightness(2, sde_enc->phys_encs[0]);
-#endif
-
 #ifdef OPLUS_BUG_STABILITY
 	if (sde_enc && sde_enc->cur_master && sde_enc->cur_master->connector) {
 		if ((is_support_panel(sde_enc->cur_master->connector) == true)) {
@@ -5435,10 +5395,6 @@ void sde_encoder_kickoff(struct drm_encoder *drm_enc, bool is_error)
 		if (phys && phys->ops.handle_post_kickoff)
 			phys->ops.handle_post_kickoff(phys);
 	}
-#if defined(OPLUS_FEATURE_PXLW_IRIS5) || defined(CONFIG_PXLW_SOFT_IRIS)
-	iris_sde_encoder_sync_panel_brightness(sde_enc->num_phys_encs,
-			sde_enc->phys_encs[0]);
-#endif
 
 	if (sde_enc->disp_info.intf_type == DRM_MODE_CONNECTOR_DSI &&
 			!_sde_encoder_wakeup_time(drm_enc, &wakeup_time)) {
@@ -6162,10 +6118,6 @@ static const struct drm_encoder_funcs sde_encoder_funcs = {
 		.early_unregister = sde_encoder_early_unregister,
 };
 
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-static void sde_encoder_disable_autorefresh_work_handler(struct kthread_work *work);
-#endif
-
 struct drm_encoder *sde_encoder_init_with_ops(
 		struct drm_device *dev,
 		struct msm_display_info *disp_info,
@@ -6248,12 +6200,6 @@ struct drm_encoder *sde_encoder_init_with_ops(
 	kthread_init_work(&sde_enc->esd_trigger_work,
 			sde_encoder_esd_trigger_work_handler);
 
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-	if (iris_is_chip_supported())
-		kthread_init_work(&sde_enc->disable_autorefresh_work,
-			sde_encoder_disable_autorefresh_work_handler);
-#endif
-
 #ifdef OPLUS_FEATURE_ADFR
 	if (oplus_adfr_is_support()) {
 		hrtimer_init(&sde_enc->fakeframe_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
@@ -6332,10 +6278,6 @@ int sde_encoder_wait_for_event(struct drm_encoder *drm_enc,
 				return ret;
 		}
 	}
-#if defined(OPLUS_FEATURE_PXLW_IRIS5) || defined(CONFIG_PXLW_SOFT_IRIS)
-	iris_sde_encoder_wait_for_event(sde_enc->num_phys_encs,
-			sde_enc->phys_encs[0], event);
-#endif
 	return ret;
 }
 
@@ -6743,95 +6685,6 @@ void sde_encoder_recovery_events_handler(struct drm_encoder *encoder,
 	sde_enc = to_sde_encoder_virt(encoder);
 	sde_enc->recovery_events_enabled = enabled;
 }
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-/**
- * sde_encoder_rc_lock - lock the sde encoder resource control.
- * @drm_enc:    Pointer to drm encoder structure
- * @Return:     void.
- */
-void sde_encoder_rc_lock(struct drm_encoder *drm_enc)
-{
-	struct sde_encoder_virt *sde_enc;
-
-	if (!drm_enc || !drm_enc->dev || !drm_enc->dev->dev_private) {
-		SDE_ERROR("invalid encoder\n");
-		return;
-	}
-	sde_enc = to_sde_encoder_virt(drm_enc);
-	mutex_lock(&sde_enc->rc_lock);
-}
-
-/**
- * sde_encoder_rc_unlock - unlock the sde encoder resource control.
- * @drm_enc:    Pointer to drm encoder structure
- * @Return:     void.
- */
-void sde_encoder_rc_unlock(struct drm_encoder *drm_enc)
-{
-	struct sde_encoder_virt *sde_enc;
-
-	if (!drm_enc || !drm_enc->dev || !drm_enc->dev->dev_private) {
-		SDE_ERROR("invalid encoder\n");
-		return;
-	}
-	sde_enc = to_sde_encoder_virt(drm_enc);
-	mutex_unlock(&sde_enc->rc_lock);
-}
-
-/**
- * sde_encoder_disable_autorefresh - disable autorefresh
- * @drm_enc:    Pointer to drm encoder structure
- * @Return:     void.
- */
-void sde_encoder_disable_autorefresh_handler(struct drm_encoder *drm_enc)
-{
-	struct sde_encoder_virt *sde_enc;
-	struct msm_drm_private *priv;
-	struct msm_drm_thread *event_thread;
-
-	if (!drm_enc || !drm_enc->dev || !drm_enc->dev->dev_private) {
-		SDE_ERROR("invalid encoder parameters\n");
-		return;
-	}
-
-	sde_enc = to_sde_encoder_virt(drm_enc);
-	priv = drm_enc->dev->dev_private;
-	if (!sde_enc->crtc) {
-		SDE_ERROR("invalid crtc");
-		return;
-	}
-
-	if (sde_enc->crtc->index >= ARRAY_SIZE(priv->event_thread)) {
-		SDE_ERROR("invalid crtc index:%u\n",
-				sde_enc->crtc->index);
-		return;
-	}
-	event_thread = &priv->event_thread[sde_enc->crtc->index];
-	if (!event_thread) {
-		SDE_ERROR("event_thread not found for crtc:%d\n",
-				sde_enc->crtc->index);
-		return;
-	}
-
-	kthread_queue_work(&event_thread->worker,
-				&sde_enc->disable_autorefresh_work);
-}
-
-static void sde_encoder_disable_autorefresh_work_handler(struct kthread_work *work)
-{
-	// FIXME: add it in lightup.c
-	iris_inc_osd_irq_cnt();
-}
-bool sde_encoder_is_disabled(struct drm_encoder *drm_enc)
-{
-	struct sde_encoder_virt *sde_enc;
-	struct sde_encoder_phys *phys;
-
-	sde_enc = to_sde_encoder_virt(drm_enc);
-	phys = sde_enc->phys_encs[0];
-	return (phys->enable_state == SDE_ENC_DISABLED);
-}
-#endif
 
 #ifdef OPLUS_FEATURE_ADFR
 

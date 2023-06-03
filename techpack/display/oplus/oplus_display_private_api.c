@@ -27,12 +27,6 @@
 #include <linux/notifier.h>
 #include <linux/msm_drm_notify.h>
 #include <soc/oplus/device_info.h>
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-#include <video/mipi_display.h>
-#include "iris/dsi_iris5_api.h"
-#include "iris/dsi_iris5_lightup.h"
-#include "iris/dsi_iris5_loop_back.h"
-#endif
 #include "dsi_pwr.h"
 
 #ifdef OPLUS_FEATURE_ADFR
@@ -45,7 +39,6 @@ extern int hbm_mode;
 extern int spr_mode;
 extern int lcd_closebl_flag;
 int lcd_closebl_flag_fp = 0;
-int iris_recovery_check_state = -1;
 
 int backlight_smooth_enable = 1;
 
@@ -146,14 +139,6 @@ int oplus_set_display_vendor(struct dsi_display *display)
 
 	return 0;
 }
-
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-extern int iris_panel_dcs_type_set(struct dsi_cmd_desc *cmd, void *data, size_t len);
-
-extern int iris_panel_dcs_write_wrapper(struct dsi_panel *panel, void *data, size_t len);
-
-extern int iris_panel_dcs_read_wrapper(struct dsi_display *display, u8 cmd, void *rbuf, size_t rlen);
-#endif
 
 bool is_dsi_panel(struct drm_crtc *crtc)
 {
@@ -538,20 +523,6 @@ struct device_attribute *attr, char *buf) {
 	return sprintf(buf, "%d\n", spr_mode);
 }
 
-static ssize_t oplus_display_get_iris_state(struct device *dev,
-struct device_attribute *attr, char *buf) {
-
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-	if (iris_is_chip_supported() && iris_loop_back_validate() == 0) {
-		iris_recovery_check_state = 0;
-	}
-
-	printk(KERN_INFO "oplus_display_get_iris_state = %d\n",iris_recovery_check_state);
-#endif
-
-	return sprintf(buf, "%d\n", iris_recovery_check_state);
-}
-
 static ssize_t oplus_display_regulator_control(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count) {
@@ -565,16 +536,8 @@ static ssize_t oplus_display_regulator_control(struct device *dev,
 	}
 	temp_display = get_main_display();
 	if(temp_save == 0) {
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-		if (iris_is_chip_supported())
-			iris_control_pwr_regulator(false);
-#endif
 		dsi_pwr_enable_regulator(&temp_display->panel->power_info, false);
 	} else if(temp_save == 1) {
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-		if (iris_is_chip_supported())
-			iris_control_pwr_regulator(true);
-#endif
 		dsi_pwr_enable_regulator(&temp_display->panel->power_info, true);
 	}
 	return count;
@@ -740,14 +703,7 @@ static ssize_t oplus_display_set_panel_reg(struct device *dev,
 			pr_err("failed\n");
 			return -EINVAL;
 		}
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-		if (iris_is_chip_supported() && iris_is_pt_mode(get_main_display()->panel))
-			iris_panel_dcs_read_wrapper(get_main_display(), value, reg, len);
-		else
-			dsi_display_read_panel_reg(get_main_display(),value, reg, len);
-#else
 		dsi_display_read_panel_reg(get_main_display(),value, reg, len);
-#endif
 
 		for (index; index < len; index++) {
 			printk("%x ", reg[index]);
@@ -782,16 +738,8 @@ static ssize_t oplus_display_set_panel_reg(struct device *dev,
 				dsi_display_clk_ctrl(display->dsi_clk_handle,
 						DSI_ALL_CLKS, DSI_CLK_ON);
 			}
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-			if (iris_is_chip_supported() && iris_is_pt_mode(display->panel))
-				ret = iris_panel_dcs_write_wrapper(display->panel, reg, len);
-			else
-				ret = mipi_dsi_dcs_write(&display->panel->mipi_device, reg[0],
-							 payload, len -1);
-#else
 			ret = mipi_dsi_dcs_write(&display->panel->mipi_device, reg[0],
 						 payload, len -1);
-#endif
 
 			if (display->config.panel_mode == DSI_OP_CMD_MODE) {
 				dsi_display_clk_ctrl(display->dsi_clk_handle,
@@ -2276,13 +2224,6 @@ int dsi_display_oplus_set_power(struct drm_connector *connector,
 		return -EINVAL;
 	}
 
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-	if (iris_is_chip_supported() && NULL != display->display_type && !strcmp(display->display_type, "secondary")) {
-		//pr_err("%s return\n", __func__);
-		return rc;
-	}
-#endif
-
 	if (power_mode == SDE_MODE_DPMS_OFF && !display->panel->oplus_priv.esd_err_flag_enabled)
 		atomic_set(&display->panel->esd_pending, 1);
 
@@ -3593,7 +3534,6 @@ static DEVICE_ATTR(roundcorner, S_IRUGO|S_IRUSR, oplus_display_get_roundcorner, 
 static DEVICE_ATTR(dynamic_osc_clock, S_IRUGO|S_IWUSR, oplus_display_get_dynamic_osc_clock, oplus_display_set_dynamic_osc_clock);
 static DEVICE_ATTR(max_brightness, S_IRUGO|S_IWUSR, oplus_display_get_max_brightness, oplus_display_set_max_brightness);
 static DEVICE_ATTR(ccd_check, S_IRUGO|S_IRUSR, oplus_display_get_ccd_check, NULL);
-static DEVICE_ATTR(iris_rm_check, S_IRUGO|S_IWUSR, oplus_display_get_iris_state, NULL);
 static DEVICE_ATTR(panel_pwr, S_IRUGO|S_IWUSR, oplus_display_get_panel_pwr, oplus_display_set_panel_pwr);
 static DEVICE_ATTR(mca_state, S_IRUGO|S_IWUSR, oplus_display_get_mca, oplus_display_set_mca);
 static DEVICE_ATTR(failsafe, S_IRUGO|S_IWUSR, NULL, oplus_display_set_failsafe);
@@ -3649,7 +3589,6 @@ static struct attribute *oplus_display_attrs[] = {
 	&dev_attr_dynamic_osc_clock.attr,
 	&dev_attr_max_brightness.attr,
 	&dev_attr_ccd_check.attr,
-	&dev_attr_iris_rm_check.attr,
 	&dev_attr_panel_pwr.attr,
 	&dev_attr_mca_state.attr,
 	&dev_attr_failsafe.attr,
