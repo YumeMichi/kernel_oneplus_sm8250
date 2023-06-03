@@ -40,9 +40,6 @@
 #ifdef OPLUS_BUG_STABILITY
 #include "oplus_display_private_api.h"
 #endif
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-#include "iris/dsi_iris5_api.h"
-#endif
 
 #define SDE_DEBUG_PLANE(pl, fmt, ...) SDE_DEBUG("plane%d " fmt,\
 		(pl) ? (pl)->base.base.id : -1, ##__VA_ARGS__)
@@ -1135,9 +1132,6 @@ static inline void _sde_plane_setup_csc(struct sde_plane *psde)
 		psde->csc_ptr = (struct sde_csc_cfg *)&sde_csc10_YUV2RGB_601L;
 	else
 		psde->csc_ptr = (struct sde_csc_cfg *)&sde_csc_YUV2RGB_601L;
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-	iris_sde_plane_setup_csc(psde->csc_ptr);
-#endif
 
 	SDE_DEBUG_PLANE(psde, "using 0x%X 0x%X 0x%X...\n",
 			psde->csc_ptr->csc_mv[0],
@@ -3135,11 +3129,6 @@ static void _sde_plane_update_format_and_rects(struct sde_plane *psde,
 	if (psde->pipe_hw->ops.setup_dgm_csc)
 		psde->pipe_hw->ops.setup_dgm_csc(psde->pipe_hw,
 			pstate->multirect_index, psde->csc_usr_ptr);
-#if defined(PXLW_IRIS_DUAL)
-	if (psde->pipe_hw->ops.setup_csc_v2)
-		psde->pipe_hw->ops.setup_csc_v2(psde->pipe_hw,
-			fmt, psde->csc_usr_ptr);
-#endif
 }
 
 static void _sde_plane_update_sharpening(struct sde_plane *psde)

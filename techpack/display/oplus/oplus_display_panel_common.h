@@ -92,7 +92,6 @@ int oplus_display_panel_set_dynamic_osc_clock(void *data);
 int oplus_display_panel_get_dynamic_osc_clock(void *data);
 int __oplus_display_set_mca(int mode);
 int dsi_display_set_mca(struct dsi_display *display);
-int oplus_display_get_softiris_color_status(void *data);
 int oplus_display_panel_hbm_lightspot_check(void);
 int oplus_display_set_dither_status(void *buf);
 int oplus_display_get_dither_status(void *buf);

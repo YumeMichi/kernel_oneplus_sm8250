@@ -515,10 +515,6 @@ int dsi_panel_parse_oplus_config(struct dsi_panel *panel)
 		oplus_enhance_mipi_strength = false;
 	}
 
-	panel->oplus_priv.is_pxlw_iris5 = utils->read_bool(utils->data,
-				"oplus,is_pxlw_iris5");
-	DSI_INFO("is_pxlw_iris5: %s", panel->oplus_priv.is_pxlw_iris5 ? "true" : "false");
-
 #ifdef OPLUS_FEATURE_AOD_RAMLESS
 	panel->oplus_priv.is_aod_ramless = utils->read_bool(utils->data,
 			"oplus,aod_ramless");
