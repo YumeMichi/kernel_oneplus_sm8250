@@ -4,11 +4,6 @@ ccflags-y += -I$(srctree)/techpack/display/msm/sde
 ccflags-y += -I$(srctree)/techpack/display/rotator
 ccflags-y += -I$(srctree)/techpack/display/oplus
 
-ifeq ($(OPLUS_FEATURE_PXLW_IRIS5),yes)
-ccflags-y += -I$(srctree)/techpack/display/msm/dsi/iris
-ccflags-y += -DOPLUS_FEATURE_PXLW_IRIS5
-endif #/* OPLUS_FEATURE_PXLW_IRIS5 */
-
 msm_drm-$(CONFIG_DRM_MSM_DP) += dp/dp_usbpd.o \
 	dp/dp_parser.o \
 	dp/dp_power.o \
@@ -108,29 +103,6 @@ msm_drm-$(CONFIG_DRM_MSM_DSI) += dsi/dsi_phy.o \
 	dsi/dsi_display_test.o \
 	dsi/ktz8866_init.o \
 
-#ifeq ($(OPLUS_FEATURE_PXLW_IRIS5),y)
-msm_drm-$(CONFIG_DRM_MSM_DSI) += dsi/iris/dsi_iris5_ioctl.o \
-				dsi/iris/dsi_iris5_lightup.o \
-				dsi/iris/dsi_iris5_lightup_ocp.o \
-				dsi/iris/dsi_iris5_lp.o \
-				dsi/iris/dsi_iris5_lut.o \
-				dsi/iris/dsi_iris5_pq.o \
-				dsi/iris/dsi_iris5_mode_switch.o \
-				dsi/iris/dsi_iris5_cmds.o \
-				dsi/iris/dsi_iris5_i3c.o \
-				dsi/iris/dsi_iris5_i2c.o \
-				dsi/iris/dsi_iris5_loop_back.o \
-				dsi/iris/dsi_iris5_gpio.o \
-				dsi/iris/dsi_iris5_frc.o \
-				dsi/iris/dsi_iris5_timing_switch.o \
-				dsi/iris/dsi_iris5_dbg.o \
-				dsi/iris/msm_iris5_extended.o \
-				dsi/iris/sde_iris5_extended.o \
-				dsi/iris/dsi_iris5_extended.o
-$(warning "Defined OPLUS_FEATURE_PXLW_IRIS5 and PXLW_IRIS_DUAL in makefile")
-ccflags-y += -DOPLUS_FEATURE_PXLW_IRIS5
-ccflags-y += -DPXLW_IRIS_DUAL
-#endif
 msm_drm-$(CONFIG_DSI_PARSER) += dsi/dsi_parser.o \
 
 msm_drm-$(CONFIG_DRM_MSM) += \

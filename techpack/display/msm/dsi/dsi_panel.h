@@ -204,7 +204,6 @@ struct dsi_panel_oplus_privite {
 	bool skip_mipi_last_cmd;
 	struct oplus_brightness_alpha *bl_remap;
 	int bl_remap_count;
-	bool is_pxlw_iris5;
 	bool bl_interpolate_nosub;
 	bool bl_interpolate_remap_nosub;
 	bool bl_interpolate_alpha_dc_nosub;
@@ -319,9 +318,6 @@ struct dsi_panel {
 #endif
 	int vddr_gpio;
 	int panel_test_gpio;
-#if defined(OPLUS_FEATURE_PXLW_IRIS5)
-	bool is_secondary;
-#endif
 	int power_mode;
 	enum dsi_panel_physical_type panel_type;
 #ifdef OPLUS_FEATURE_ADFR

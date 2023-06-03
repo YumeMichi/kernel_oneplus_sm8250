@@ -480,11 +480,6 @@ int fingerprint_wait_vsync(struct drm_encoder *drm_enc, struct dsi_panel *panel)
 		return -ENOLINK;
 	}
 
-	if (sde_encoder_is_disabled(drm_enc)) {
-		SDE_ERROR("%s encoder is disabled", __func__);
-		return -EIO;
-	}
-
 	mutex_unlock(&panel->panel_lock);
 	sde_encoder_wait_for_event(drm_enc,  MSM_ENC_VBLANK);
 	mutex_lock(&panel->panel_lock);
