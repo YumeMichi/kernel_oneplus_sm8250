@@ -1,76 +1,198 @@
-name: Build OnePluss-Sm8250-Kernel
+name: Build Kernel
+
 on:
   workflow_dispatch:
-  schedule:
-      # Run once a week on Sunday at midnight. See http://crontab.guru
-      - cron: '0 21 * * *'
-  push:
-    branches:
-      - HEAD
-  pull_request:
-      branches:
-      - HEAD
+
+    inputs:
+      KERNEL_SOURCE:
+        description: 'Kernel Source'
+        required: true
+        default: 'Rohail33/RealKing-kernel-SM8250'
+      KERNEL_SOURCE_BRANCH:
+        description: 'Branch'
+        required: true
+        default: 'munch-mi'
+      KERNEL_DEFCONFIG:
+        description: 'Defconfig'
+        required: true
+        default: 'vendor/munch_defconfig'
+      TARGET_ARCH:
+        description: 'Target ARCH'
+        required: true
+        default: 'arm64'
+      KERNEL_FILE:
+        description: 'Your kernel out image name'
+        required: true
+        default: 'Image.gz'
+      CLANG_URL:
+        description: 'Clang URL'
+        required: true
+        default: 'https://github.com/ZyCromerZ/Clang/releases/download/17.0.0-20230217-release/Clang-17.0.0-20230217.tar.gz'
+      BUILD_EXTRA_COMMAND:
+        description: 'Extra build commands(e.g. LLVM=1 LLVM_IAS=1)'
+        required: false
+        default: 'NM=llvm-nm OBJDUMP=llvm-objdump STRIP=llvm-strip'
+      USE_KPROBES:
+        description: 'Use Kprobes'
+        required: false
+        default: 'true'
+        type: boolean
+      USE_KERNELSU:
+        description: 'Use KernelSU'
+        required: true
+        default: 'true'
+        type: boolean
+      SSH:
+        description: 'SSH connection to Actions'
+        required: false
+        default: 'false'
+        type: boolean
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
-      CCACHE_NOHASHDIR: "true"
-      CCACHE_MAXSIZE: "2G"
-      CCACHE_HARDLINK: "true"
-      KERNEL_DEFCONFIG: "vendor/kona-perf_defconfig"
-      KERNEL_CMDLINE: "ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- LLVM=1 LLVM_IAS=1 O=out"
     steps:
-    - name: Checkout
+
+    - uses: actions/checkout@v3
+
+    - name: Setup Configuration
+      run: |
+        echo "KERNEL_SOURCE=${{ github.event.inputs.KERNEL_SOURCE }}" >> $GITHUB_ENV
+        echo "KERNEL_SOURCE_BRANCH=${{ github.event.inputs.KERNEL_SOURCE_BRANCH }}" >> $GITHUB_ENV
+        echo "KERNEL_DEFCONFIG=${{ github.event.inputs.KERNEL_DEFCONFIG }}" >> $GITHUB_ENV
+        echo "TARGET_ARCH=${{ github.event.inputs.TARGET_ARCH }}" >> $GITHUB_ENV
+        echo "KERNEL_FILE=${{ github.event.inputs.KERNEL_FILE }}" >> $GITHUB_ENV
+        echo "CLANG_URL=${{ github.event.inputs.CLANG_URL }}" >> $GITHUB_ENV
+        echo "BUILD_EXTRA_COMMAND=${{ github.event.inputs.BUILD_EXTRA_COMMAND }}" >> $GITHUB_ENV
+        echo "USE_KPROBES=${{ github.event.inputs.USE_KPROBES }}" >> $GITHUB_ENV
+        echo "USE_KERNELSU=${{ github.event.inputs.USE_KERNELSU }}" >> $GITHUB_ENV
+        echo "SSH=${{ github.event.inputs.SSH }}" >> $GITHUB_ENV
+
+    - name: Setup build kernel environment
+      run: |
+        echo "BUILD_TIME=$(TZ=Asia/Shanghai date "+%Y%m%d%H%M")" >> $GITHUB_ENV
+        echo "DEVICE=$(echo ${{ env.KERNEL_DEFCONFIG }} | sed 's!vendor/!!;s/_defconfig//;s/_user//;s/-perf//')" >> $GITHUB_ENV
+        sudo apt-get update
+        sudo apt-get install git ccache automake flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev libbz2-1.0 libghc-bzlib-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool make optipng maven libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 lib32ncurses5-dev libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler python2 python3
+
+    - name: Download Clang Toolchain
+      run: |
+        mkdir clang
+        wget -q ${{ env.CLANG_URL }} -O clang.tar.gz
+        tar -C clang/ -zxf clang.tar.gz
+
+    - name: Checkout Kernel Source
       uses: actions/checkout@v3
       with:
-        submodules: 'true'
-        fetch-depth: 100
+        github-server-url: 'https://github.com'
+        repository: ${{ env.KERNEL_SOURCE }}
+        ref: ${{ env.KERNEL_SOURCE_BRANCH }}
+        submodules: recursive
+        path: android-kernel
 
-    - name: Set up ccache
-      uses: hendrikmuhs/ccache-action@v1.2
-
-    - name: Install dependencies
+    - name: Setup KernelSU
+      if: env.USE_KERNELSU == 'true'
       run: |
-        sudo apt-get update -y 
-        sudo apt install gcc-aarch64-linux-gnu -y
-        sudo apt install gcc-arm-linux-gnueabi -y
-        sudo apt install binutils make python3 libssl-dev build-essential bc  bison flex unzip libssl-dev ca-certificates xz-utils mkbootimg cpio device-tree-compiler git git-lfs -y
-        git clone https://codeberg.org/Mandi-Sa/clang --dept=1 -b amd64-kernel-arm
-        git clone https://github.com/lateautumn233/AnyKernel3 -b master --depth=1
-        rm -rf AnyKernel3/.git
-    
-    - name: GetTime
-      id: get_time
-      run: |
-        echo "TIME=$(TZ=UTC-8 date +%m%d%H%M )" >> $GITHUB_OUTPUT
+        cd android-kernel
+        if [ ${{ env.USE_KPROBES }} = true ] ; then
+            echo "CONFIG_MODULES=y" >> arch/${{ env.TARGET_ARCH }}/configs/${{ env.KERNEL_DEFCONFIG }}
+            echo "CONFIG_KPROBES=y" >> arch/${{ env.TARGET_ARCH }}/configs/${{ env.KERNEL_DEFCONFIG }}
+            echo "CONFIG_HAVE_KPROBES=y" >> arch/${{ env.TARGET_ARCH }}/configs/${{ env.KERNEL_DEFCONFIG }}
+            echo "CONFIG_KPROBE_EVENTS=y" >> arch/${{ env.TARGET_ARCH }}/configs/${{ env.KERNEL_DEFCONFIG }}
+            curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+            echo "UPLOADNAME=-KernelSU" >> $GITHUB_ENV
+        else
+            if git apply --check ../KernelSU.patch ; then
+                git apply ../KernelSU.patch
+                curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+                echo "UPLOADNAME=-KernelSU" >> $GITHUB_ENV
+            else
+                echo "KernelSU Patching failed"
+            fi
+        fi
 
-    - name: Build Kernel
+    - name: Generate kernel configuration
       run: |
-       export PATH=$(pwd)/clang/bin/:$PATH
-       export ARCH=arm64
-       export SUBARCH=arm64
-       make $KERNEL_CMDLINE $KERNEL_DEFCONFIG CC="ccache clang"
-       make $KERNEL_CMDLINE CC="ccache clang" -j$(nproc --all)
-       cp out/arch/arm64/boot/Image.gz AnyKernel3
+        cd android-kernel
+        export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
+        export ARCH=${{ env.TARGET_ARCH }}
+        export SUBARCH=${{ env.TARGET_ARCH }}
+        export KBUILD_COMPILER_STRING="$(clang --version | head -n 1 | perl -pe 's/\(http.*?\)//gs' | sed -e 's/  */ /g' -e 's/[[:space:]]*$//')"
+        export KBUILD_BUILD_HOST=GitHub-Action
+        export KBUILD_BUILD_USER=$(echo ${{ github.actor }} | tr A-Z a-z)
+        make -j$(nproc --all) O=out ARCH=${{ env.TARGET_ARCH }} CC=clang ${{ env.KERNEL_DEFCONFIG }}
 
-    - name: Upload Kernel
+    - name: SSH connection to Actions
+      uses: P3TERX/ssh2actions@v1.0.0
+      if: env.SSH == 'true'
+
+    - name: Build kernel
+      run: |
+        cd android-kernel
+        export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
+        export ARCH=${{ env.TARGET_ARCH }}
+        export SUBARCH=${{ env.TARGET_ARCH }}
+        export KBUILD_COMPILER_STRING="$(clang --version | head -n 1 | perl -pe 's/\(http.*?\)//gs' | sed -e 's/  */ /g' -e 's/[[:space:]]*$//')"
+        export KBUILD_BUILD_HOST=GitHub-Action
+        export KBUILD_BUILD_USER=$(echo ${{ github.actor }} | tr A-Z a-z)
+        make -j$(nproc --all) O=out ARCH=arm64 savedefconfig
+        cp -f out/defconfig arch/${{ env.TARGET_ARCH }}/configs/${{ env.KERNEL_DEFCONFIG }}
+        make -j$(nproc --all) O=out ARCH=${{ env.TARGET_ARCH }} CC=clang CROSS_COMPILE=aarch64-linux-gnu- ${{ env.BUILD_EXTRA_COMMAND }}
+
+    - name: Check the kernel output files
+      run: |
+       if [ -f android-kernel/out/arch/${{ env.TARGET_ARCH }}/boot/${{ env.KERNEL_FILE }} ] ; then
+           echo "CHECK_KERNEL_FILE_IS_OK=true" >> $GITHUB_ENV
+       else
+           echo "Kernel output file is empty"
+       fi
+       if [ -f android-kernel/out/arch/${{ env.TARGET_ARCH }}/boot/dtbo.img ] ; then
+           echo "CHECK_DTBO_IS_OK=true" >> $GITHUB_ENV
+       else
+           echo "DTBO image is empty"
+       fi
+
+    - name: Upload the kernel image
+      if: env.CHECK_KERNEL_FILE_IS_OK == 'true'
       uses: actions/upload-artifact@v3
       with:
-        name: Qiuqiu-kernel-${{ steps.get_time.outputs.TIME }}
-        path: "AnyKernel3/*"
+        name: ${{ env.KERNEL_FILE }}${{ env.UPLOADNAME }}-${{ env.DEVICE }}-${{ env.BUILD_TIME }}
+        path: android-kernel/out/arch/${{ env.TARGET_ARCH }}/boot/${{ env.KERNEL_FILE }}
 
-    - name: Build Kernel-SU
-      run: |
-        curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
-        export PATH=$(pwd)/clang/bin/:$PATH
-        make $KERNEL_CMDLINE $KERNEL_DEFCONFIG CC="ccache clang"
-        make $KERNEL_CMDLINE CC="ccache clang" -j$(nproc --all)
-        cp out/arch/arm64/boot/Image.gz AnyKernel3
-
-    - name: Upload Kernel-SU
+    - name: Upload DTBO image
+      if: env.CHECK_DTBO_IS_OK == 'true'
       uses: actions/upload-artifact@v3
       with:
-        name: Qiuqiu-kernel-SU-${{ steps.get_time.outputs.TIME }}
-        path: "AnyKernel3/*"
+        name: dtbo-${{ env.DEVICE }}-${{ env.BUILD_TIME }}
+        path: android-kernel/out/arch/${{ env.TARGET_ARCH }}/boot/dtbo.img
+
+    - name: Checkout osm0sis/AnyKernel3
+      uses: actions/checkout@v3
+      with:
+        repository: osm0sis/AnyKernel3
+        path: AnyKernel3
+
+    - name: Make Anykernel for the kernel
+      run: |
+        cd AnyKernel3
+        sed -i '/device.name[1-4]/d' anykernel.sh
+        sed -i 's/device.name5=/device.name1=${{ env.DEVICE }}/g' anykernel.sh
+        sed -i 's!block=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;!block=auto;!g' anykernel.sh
+        sed -i 's/is_slot_device=0;/is_slot_device=auto;/g' anykernel.sh
+        if [ ${{ env.CHECK_KERNEL_FILE_IS_OK }} = true ] ; then
+            cp -fp ../android-kernel/out/arch/${{ env.TARGET_ARCH }}/boot/${{ env.KERNEL_FILE }} ./
+        fi
+        if [ ${{ env.CHECK_DTBO_IS_OK }} = true ] ; then
+            cp -fp ../android-kernel/out/arch/${{ env.TARGET_ARCH }}/boot/dtbo.img ./
+        fi
+        cp -fp ../android-kernel/out/arch/${{ env.TARGET_ARCH }}/boot/dtb ./
+        cp -fp ../android-kernel/out/.config ./
+        cp -fp ../android-kernel/out/defconfig ./
+        rm -rf .git* modules patch ramdisk
+
+    - name: Upload AnyKernel3
+      if: env.CHECK_KERNEL_FILE_IS_OK == 'true'
+      uses: actions/upload-artifact@v3
+      with:
+        name: AnyKernel3${{ env.UPLOADNAME }}-${{ env.DEVICE }}-${{ env.BUILD_TIME }}
+        path: AnyKernel3/*
