@@ -135,6 +135,7 @@
 #include <linux/sched/clock.h>
 #include <linux/sched/topology.h>
 #include <linux/tick.h>
+#include <../../../kernel/sched/sched.h>
 
 /*
  * The number of bits to shift the CPU's capacity by in order to determine
@@ -212,7 +213,7 @@ static DEFINE_PER_CPU(struct teo_cpu, teo_cpus);
 #ifdef CONFIG_SMP
 static bool teo_cpu_is_utilized(int cpu, struct teo_cpu *cpu_data)
 {
-	return sched_cpu_util(cpu) > cpu_data->util_threshold;
+	return cpu_util(cpu) > cpu_data->util_threshold;
 }
 #else
 static bool teo_cpu_is_utilized(int cpu, struct teo_cpu *cpu_data)
