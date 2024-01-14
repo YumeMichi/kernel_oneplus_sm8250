@@ -104,6 +104,8 @@ static int usb_status = 0;
 struct delayed_work ccdetect_work;
 struct delayed_work wd0_detect_work;
 
+#define CHG_OPS_LEN 64
+
 extern struct oplus_chg_operations * oplus_get_chg_ops(void);
 extern void oplus_usbtemp_recover_func(struct oplus_chg_chip *chip);
 extern int oplus_usbtemp_monitor_common(void *data);
@@ -133,6 +135,7 @@ extern void oplus_notify_hvdcp_detect_stat(void);
 extern void oplus_set_hvdcp_flag_clear(void);
 void oplus_otg_enable_by_buckboost(void);
 void oplus_otg_disable_by_buckboost(void);
+int chr_get_debug_level(void);
 extern bool tcpm_is_floating_ground(struct tcpc_device *tcpc);
 extern bool mt6375_int_chrdet_attach(void);
 
@@ -467,9 +470,20 @@ bool is_charger_exist(struct mtk_charger *info)
 
 int get_charger_type(struct mtk_charger *info)
 {
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	union power_supply_propval prop, prop2, prop3;
+#else
+	union power_supply_propval prop = { 0 };
+	union power_supply_propval prop2 = { 0 };
+	union power_supply_propval prop3 = { 0 };
+#endif
 	static struct power_supply *chg_psy;
 	int ret;
+
+	/* add for variables init */
+	prop.intval = 0;
+	prop2.intval = POWER_SUPPLY_TYPE_USB;
+	prop3.intval = POWER_SUPPLY_USB_TYPE_UNKNOWN;
 
 	chg_psy = info->chg_psy;
 
@@ -507,11 +521,20 @@ int get_charger_type(struct mtk_charger *info)
 
 int get_usb_type(struct mtk_charger *info)
 {
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	union power_supply_propval prop, prop2;
+#else
+	union power_supply_propval prop = { 0 };
+	union power_supply_propval prop2 = { 0 };
+#endif
 	static struct power_supply *chg_psy;
 	int ret;
 
 	chg_psy = info->chg_psy;
+
+	/* add for variables init */
+        prop.intval = 0;
+        prop2.intval = POWER_SUPPLY_USB_TYPE_UNKNOWN;
 
 	if (chg_psy == NULL || IS_ERR(chg_psy)) {
 		chr_err("%s retry to get chg_psy\n", __func__);
@@ -748,9 +771,9 @@ void _wake_up_charger(struct mtk_charger *info)
 {
 	unsigned long flags;
 
-	info->timer_cb_duration[2] = ktime_get_boottime();
 	if (info == NULL)
 		return;
+	info->timer_cb_duration[2] = ktime_get_boottime();
 
 	spin_lock_irqsave(&info->slock, flags);
 	info->timer_cb_duration[3] = ktime_get_boottime();
@@ -1122,6 +1145,9 @@ static void mtk_charger_parse_dt(struct mtk_charger *info,
 
 	info->support_ntc_01c_precision = of_property_read_bool(np, "qcom,support_ntc_01c_precision");
 	chr_debug("%s: support_ntc_01c_precision: %d\n", __func__, info->support_ntc_01c_precision);
+
+	/* ntc_resistance:100k internal_pull_up:100k voltage:1.84v */
+	info->ntc_temp_volt_1840mv = of_property_read_bool(np, "oplus,ntc_temp_volt_1840mv");
 }
 
 static void mtk_charger_start_timer(struct mtk_charger *info)
@@ -2234,12 +2260,19 @@ static ssize_t enable_sc_store(
 	if (buf != NULL && size != 0) {
 		chr_err("[enable smartcharging] buf is %s\n", buf);
 		ret = kstrtoul(buf, 10, &val);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		if (ret < 0) {
+			chr_err("[enable smartcharging] ret is %d ??\n", ret);
+			val = 0;
+		}
+#else
 		if (val < 0) {
 			chr_err(
 				"[enable smartcharging] val is %d ??\n",
 				(int)val);
 			val = 0;
 		}
+#endif
 
 		if (val == 0)
 			info->sc.enable = false;
@@ -2298,15 +2331,14 @@ static ssize_t sc_stime_store(
 	if (buf != NULL && size != 0) {
 		chr_err("[smartcharging stime] buf is %s\n", buf);
 		ret = kstrtoul(buf, 10, &val);
-		if (val < 0) {
+		if (ret < 0) {
 			chr_err(
 				"[smartcharging stime] val is %d ??\n",
 				(int)val);
 			val = 0;
 		}
 
-		if (val >= 0)
-			info->sc.start_time = val;
+		info->sc.start_time = val;
 
 		chr_err(
 			"[smartcharging stime]enable smartcharging=%d\n",
@@ -2360,15 +2392,14 @@ static ssize_t sc_etime_store(
 	if (buf != NULL && size != 0) {
 		chr_err("[smartcharging etime] buf is %s\n", buf);
 		ret = kstrtoul(buf, 10, &val);
-		if (val < 0) {
+		if (ret < 0) {
 			chr_err(
 				"[smartcharging etime] val is %d ??\n",
 				(int)val);
 			val = 0;
 		}
 
-		if (val >= 0)
-			info->sc.end_time = val;
+		info->sc.end_time = val;
 
 		chr_err(
 			"[smartcharging stime]enable smartcharging=%d\n",
@@ -2422,15 +2453,20 @@ static ssize_t sc_tuisoc_store(
 	if (buf != NULL && size != 0) {
 		chr_err("[smartcharging tuisoc] buf is %s\n", buf);
 		ret = kstrtoul(buf, 10, &val);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		if (ret < 0) {
+			chr_err("[smartcharging tuisoc] ret is %d ??\n", ret);
+			val = 0;
+		}
+#else
 		if (val < 0) {
 			chr_err(
 				"[smartcharging tuisoc] val is %d ??\n",
 				(int)val);
 			val = 0;
 		}
-
-		if (val >= 0)
-			info->sc.target_percentage = val;
+#endif
+		info->sc.target_percentage = val;
 
 		chr_err(
 			"[smartcharging stime]tuisoc=%d\n",
@@ -2484,15 +2520,20 @@ static ssize_t sc_ibat_limit_store(
 	if (buf != NULL && size != 0) {
 		chr_err("[smartcharging ibat limit] buf is %s\n", buf);
 		ret = kstrtoul(buf, 10, &val);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		if (ret < 0) {
+			chr_err("[smartcharging ibat limit] ret is %d ??\n", ret);
+			val = 0;
+		}
+#else
 		if (val < 0) {
 			chr_err(
 				"[smartcharging ibat limit] val is %d ??\n",
 				(int)val);
 			val = 0;
 		}
-
-		if (val >= 0)
-			info->sc.current_limit = val;
+#endif
+		info->sc.current_limit = val;
 
 		chr_err(
 			"[smartcharging ibat limit]=%d\n",
@@ -3194,6 +3235,14 @@ void oplus_usbtemp_recover_cc_open(void)
 	tcpm_typec_disable_function(pinfo->tcpc, false);
 }
 
+void oplus_set_typec_cc_open(void)
+{
+	if (pinfo == NULL || pinfo->tcpc == NULL)
+		return;
+
+	tcpm_typec_disable_function(pinfo->tcpc, true);
+}
+
 static int charger_routine_thread(void *arg)
 {
 	struct mtk_charger *info = arg;
@@ -3710,6 +3759,9 @@ static void mtk_charger_external_power_changed(struct power_supply *psy)
 		psy->desc->name, prop.intval, prop2.intval,
 		get_vbus(info));
 
+	if (!prop.intval)
+		oplus_chg_set_charger_type_unknown();
+
 	_wake_up_charger(info);
 }
 
@@ -3791,6 +3843,10 @@ int notify_adapter_event(struct notifier_block *notifier,
 			pinfo->notify_code &= ~CHG_TYPEC_WD_STATUS;
 		mtk_chgstat_notify(pinfo);
 		break;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	default:
+		break;
+#endif
 	}
 	return NOTIFY_DONE;
 }
@@ -4029,6 +4085,7 @@ static int pd_tcp_notifier_call(struct notifier_block *pnb,
 		break;
 	case TCP_NOTIFY_WD0_STATE:
 		pinfo->wd0_detect = noti->wd0_state.wd0;
+		oplus_get_wd0_stat(pinfo->wd0_detect);
 		pr_err("%s wd0 = %d\n", __func__, noti->wd0_state.wd0);
 
 		if (pinfo->wd0_detect) {
@@ -4089,8 +4146,12 @@ static int pd_tcp_notifier_call(struct notifier_block *pnb,
 		pinfo->bc12_complete = noti->bc12_complete_state.bc12_complete;
 		pr_err("%s bc12 complete = %d\n", __func__, noti->bc12_complete_state.bc12_complete);
 
-		if (pinfo->bc12_complete)
+		if (pinfo->bc12_complete) {
+			power_supply_changed(g_oplus_chip->usb_psy);
 			oplus_chg_wake_update_work();
+			if (!pinfo->chrdet_state)
+				oplus_chg_set_charger_type_unknown();
+		}
 		break;
 	case TCP_NOTIFY_HARD_RESET_STATE:
 		switch (noti->hreset_state.state) {
@@ -4103,6 +4164,8 @@ static int pd_tcp_notifier_call(struct notifier_block *pnb,
 			break;
 		}
 		chg_debug("pd_wait_hard_reset_complete: %d\n", pinfo->wait_hard_reset_complete);
+		break;
+	default:
 		break;
 	}
 	return ret;
@@ -4153,6 +4216,18 @@ close_time:
 	return 0;
 }
 #endif /* CONFIG_OPLUS_RTC_DET_SUPPORT */
+
+void oplus_set_typec_sinkonly(void)
+{
+	if (pinfo != NULL && pinfo->tcpc != NULL) {
+		printk(KERN_ERR "[OPLUS_CHG][%s]: usbtemp occur otg switch[0]\n", __func__);
+#ifndef OPLUS_FEATURE_CHG_BASIC
+		tcpm_typec_change_role(pinfo->tcpc, TYPEC_ROLE_SNK);
+#else
+		tcpm_typec_change_role_postpone(pinfo->tcpc, TYPEC_ROLE_SNK, true);
+#endif
+	}
+}
 
 int oplus_chg_get_main_ibat(void)
 {
@@ -4567,6 +4642,32 @@ static struct chtemperature charger_ic_temp_table[] = {
 	{122, 2787   }, {123, 2709   }, {124, 2633   }, {125, 2560   }
 };
 
+/* ntc_resistance:100k internal_pull_up:100k voltage:1.84v */
+int con_temp_ntc_100k_1840mv[] = {
+	-40, -39, -38, -37, -36, -35, -34, -33, -32, -31, -30, -29, -28, -27, -26, -25, -24, -23, -22,
+	-21, -20, -19, -18, -17, -16, -15, -14, -13, -12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1,
+	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+	26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+	50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73,
+	74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97,
+	98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116,
+	117, 118, 119, 120, 121, 122, 123, 124, 125
+};
+
+int con_volt_ntc_100k_1840mv[] = {
+	1799, 1796, 1793, 1790, 1786, 1782, 1778, 1774, 1770, 1765, 1760, 1755, 1749, 1743, 1737, 1731,
+	1724, 1717, 1709, 1701, 1693, 1684, 1675, 1666, 1656, 1646, 1635, 1624, 1612, 1600, 1588, 1575,
+	1561, 1547, 1533, 1518, 1503, 1478, 1471, 1454, 1437, 1420, 1402, 1384, 1365, 1346, 1327, 1307,
+	1287, 1267, 1246, 1225, 1204, 1183, 1161, 1139, 1118, 1096, 1074, 1052, 1030, 1008, 986, 964,
+	942, 920, 898, 877, 855, 834, 813, 793, 772, 752, 732, 712, 693, 674, 655, 637, 619, 601, 584,
+	567, 550, 534, 518, 503, 488, 473, 459, 445, 431, 418, 405, 392, 380, 368, 357, 345, 335, 324,
+	314, 304, 294, 285, 276, 267, 259, 251, 243, 235, 227, 220, 213, 206, 200, 194, 187, 182, 176,
+	170, 165, 160, 155, 150, 145, 140, 136, 132, 128, 124, 120, 117, 113, 110, 106, 103, 100, 97,
+	94, 91, 88, 86, 83, 81, 78, 76, 74, 72, 70, 68, 66, 64, 62, 60, 58, 57, 55, 54, 52, 51, 49, 48,
+	47, 45
+};
+/* ntc_resistance:100k internal_pull_up:100k voltage:1.84v */
+
 static __s16 oplus_ch_thermistor_conver_temp(__s32 res)
 {
 	int i = 0;
@@ -4624,11 +4725,16 @@ static __s16 oplus_ts_ch_volt_to_temp(__u32 dwvolt)
 
 	return chg_tmp;
 }
-
+#define OPLUS_CHARGER_IC_DEFAULT 25
 int oplus_get_chargeric_temp(void)
 {
 	int val = 0;
 	int ret = 0, output;
+
+	if (!pinfo) {
+		chg_err("pinfo is null, set charger_ic temp as default 25C!\n");
+		return OPLUS_CHARGER_IC_DEFAULT;
+	}
 
 	if (pinfo && pinfo->chargeric_temp_chan) {
 		ret = iio_read_channel_processed(pinfo->chargeric_temp_chan, &val);
@@ -4723,6 +4829,14 @@ static int oplus_chg_shipmode_parse_dt(struct oplus_chg_chip *chip)
 
 	return rc;
 }
+
+int oplus_force_get_subboard_temp(void)
+{
+/* todo */
+	return 0;
+}
+EXPORT_SYMBOL(oplus_force_get_subboard_temp);
+
 
 static bool oplus_usbtemp_check_is_gpio(struct oplus_chg_chip *chip)
 {
@@ -5874,10 +5988,29 @@ static int mt_ac_get_property(struct power_supply *psy,
 	return rc;
 }
 
+static bool is_ext_mp2650_chg_ops(void)
+{
+	return (strncmp(oplus_chg_ops_name_get(), "ext-mp2650", CHG_OPS_LEN) == 0);
+}
+
+#define OPLUS_DEFAULT_CHG_VOLT 0
 static int mt_usb_get_property(struct power_supply *psy,
 	enum power_supply_property psp, union power_supply_propval *val)
 {
-	return oplus_usb_get_property(psy, psp, val);
+	int rc = 0;
+	switch (psp) {
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		if (is_ext_mp2650_chg_ops())
+			val->intval = mp2650_get_vbus_voltage() * 1000;
+		else
+			val->intval = OPLUS_DEFAULT_CHG_VOLT;
+		break;
+	default:
+		rc = oplus_usb_get_property(psy, psp, val);
+		break;
+	}
+
+	return 0;
 }
 
 static int battery_prop_is_writeable(struct power_supply *psy,
@@ -5911,9 +6044,6 @@ static int battery_get_property(struct power_supply *psy,
 				val->intval = g_oplus_chip->batt_fcc * 1000;
 			}
 			break;
-		case POWER_SUPPLY_PROP_TIME_TO_FULL_NOW:
-			val->intval = 0;
-			break;
 		default:
 			rc = oplus_battery_get_property(psy, psp, val);
 			break;
@@ -5931,6 +6061,7 @@ static enum power_supply_property mt_usb_properties[] = {
 	POWER_SUPPLY_PROP_ONLINE,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 };
 
 static enum power_supply_property battery_properties[] = {
@@ -6190,6 +6321,22 @@ int oplus_get_fast_chg_type(void)
 	return fast_chg_type;
 }
 
+static bool oplus_pd_without_usb(void)
+{
+	struct tcpc_device *tcpc;
+
+	tcpc = tcpc_dev_get_by_name("type_c_port0");
+	if (!tcpc) {
+		chg_err("get type_c_port0 fail\n");
+		return true;
+	}
+
+	if (!tcpm_inquire_pd_connected(tcpc))
+		return true;
+	return (tcpm_inquire_dpm_flags(tcpc) &
+			DPM_FLAGS_PARTNER_USB_COMM) ? false : true;
+}
+
 int mt_power_supply_type_check(void)
 {
 	int chr_type;
@@ -6209,6 +6356,9 @@ int mt_power_supply_type_check(void)
 	if (chip && chip->wireless_support && !prop.intval &&
 			(oplus_wpc_get_wireless_charge_start() == true || oplus_chg_is_wls_present()))
 		chr_type = POWER_SUPPLY_TYPE_WIRELESS;
+
+	if(!oplus_pd_without_usb())
+		chr_type = POWER_SUPPLY_USB_TYPE_PD_SDP;
 
 	chr_err("charger_type[%d]\n", chr_type);
 
@@ -6257,6 +6407,8 @@ int oplus_chg_set_qc_config_forsvooc(void)
 #ifdef CONFIG_OPLUS_HVDCP_SUPPORT
 		oplus_notify_hvdcp_detect_stat();
 #endif
+		if (chip->pdqc_9v_voltage_adaptive && is_ext_mp2650_chg_ops())
+			oplus_chg_pdqc9v_vindpm_vol_switch(OPLUS_PDQC_5VTO9V);
 		msleep(300);
 		oplus_chg_unsuspend_charger();
 		ret = 0;
@@ -6270,6 +6422,8 @@ int oplus_chg_set_qc_config_forsvooc(void)
 			oplus_chg_config_charger_vsys_threshold(0x03);/* set Vsys Skip threshold 101% */
 			mt6375_set_hvdcp_to_5v();
 			msleep(400);
+			if (chip->pdqc_9v_voltage_adaptive && is_ext_mp2650_chg_ops())
+				oplus_chg_pdqc9v_vindpm_vol_switch(OPLUS_PDQC_9VTO5V);
 			printk(KERN_ERR "%s: charger voltage=%d", __func__, chip->charger_volt);
 			oplus_chg_unsuspend_charger();
 			ret = 0;
@@ -6318,7 +6472,8 @@ bool oplus_mt_get_vbus_status(void)
 		return false;
 	}
 
-	if (pinfo->chrdet_state || mt6375_int_chrdet_attach() || info->wait_hard_reset_complete) {
+	if (pinfo->chrdet_state || mt6375_int_chrdet_attach()
+			|| (pinfo->wd0_detect && info->wait_hard_reset_complete)) {
 		return true;
 	} else if (oplus_wpc_get_wireless_charge_start() || oplus_chg_is_wls_present()) {
 		return true;
@@ -6421,6 +6576,10 @@ int oplus_chg_set_pd_config(void)
 		}
 
 		msleep(300);
+
+		if (chip->pdqc_9v_voltage_adaptive && is_ext_mp2650_chg_ops())
+			oplus_chg_pdqc9v_vindpm_vol_switch(OPLUS_PDQC_5VTO9V);
+
 		oplus_chg_unsuspend_charger();
 		printk(KERN_ERR "%s: PD request vbus_mv[%d], ibus_ma[%d]\n", __func__, vbus_mv_t, ibus_ma_t);
 	} else {
@@ -6444,6 +6603,10 @@ int oplus_chg_set_pd_config(void)
 			}
 
 			msleep(300);
+
+			if (chip->pdqc_9v_voltage_adaptive && is_ext_mp2650_chg_ops())
+				oplus_chg_pdqc9v_vindpm_vol_switch(OPLUS_PDQC_9VTO5V);
+
 			oplus_chg_unsuspend_charger();
 			printk(KERN_ERR "%s: PD Default vbus_mv[%d], ibus_ma[%d]\n", __func__, vbus_mv_t, ibus_ma_t);
 		}
@@ -7370,9 +7533,15 @@ static int mtk_charger_probe(struct platform_device *pdev)
 		}
 	}
 
-	oplus_chip->con_volt = con_volt_21135;
-	oplus_chip->con_temp = con_temp_21135;
-	oplus_chip->len_array = ARRAY_SIZE(con_temp_20131);
+	if (info->ntc_temp_volt_1840mv) {
+		oplus_chip->con_volt = con_volt_ntc_100k_1840mv;
+		oplus_chip->con_temp = con_temp_ntc_100k_1840mv;
+		oplus_chip->len_array = ARRAY_SIZE(con_temp_ntc_100k_1840mv);
+	} else {
+		oplus_chip->con_volt = con_volt_21135;
+		oplus_chip->con_temp = con_temp_21135;
+		oplus_chip->len_array = ARRAY_SIZE(con_temp_20131);
+	}
 	if (oplus_usbtemp_check_is_support() == true)
 		oplus_usbtemp_thread_init();
 
@@ -7494,7 +7663,6 @@ module_exit(mtk_charger_exit);
 oplus_chg_module_register(mtk_charger);
 #endif
 
-MODULE_AUTHOR("wy.chuang <wy.chuang@mediatek.com>");
 MODULE_DESCRIPTION("MTK Charger Driver");
 MODULE_LICENSE("GPL");
 

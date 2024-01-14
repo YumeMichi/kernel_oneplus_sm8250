@@ -167,7 +167,7 @@ static const struct file_operations proc_swappiness_para_ops = {
 int create_swappiness_para_proc(void)
 {
 	para_entry = proc_create("oplus_healthinfo/swappiness_para",
-		S_IRUSR|S_IWUSR, NULL, &proc_swappiness_para_ops);
+		0666, NULL, &proc_swappiness_para_ops);
 
 	if (para_entry) {
 		printk("Register swappiness_para interface passed.\n");

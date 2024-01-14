@@ -43,6 +43,7 @@
 #include <linux/kthread.h>
 #include <soc/oplus/system/oplus_bscheck.h>
 #include <soc/oplus/system/oplus_brightscreen_check.h>
+#include "../include/theia_send_event.h"
 
 #include <asm/uaccess.h>
 #include <linux/proc_fs.h>
@@ -135,4 +136,5 @@ void record_stage(const char *buf);
 bool is_valid_systemserver_pid(int pid);
 int get_systemserver_pid(void);
 void doPanic(void);
-#endif
+bool is_system_boot_completed(void);
+#endif /* __POWERKEY_MONITOR_H_ */

@@ -620,6 +620,8 @@ static long logger_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			break;
 		}
 		return OSVELTE_VERSION;
+	default:
+		break;
 	}
 
 	ret = proc_memstat_ioctl(file, cmd, arg);

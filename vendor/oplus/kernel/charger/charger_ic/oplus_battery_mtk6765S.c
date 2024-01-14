@@ -1917,7 +1917,13 @@ static int psy_charger_set_property(struct power_supply *psy,
 static void mtk_charger_external_power_changed(struct power_supply *psy)
 {
 	struct mtk_charger *info;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	union power_supply_propval prop = { 0 };
+	union power_supply_propval prop2 = { 0 };
+	union power_supply_propval type_prop = { 0 };
+#else
 	union power_supply_propval prop, prop2, type_prop;
+#endif
 	struct power_supply *chg_psy = NULL;
 	int ret;
 
@@ -2024,6 +2030,10 @@ static int notify_adapter_event(struct notifier_block *notifier,
 		/* type C is ready */
 		_wake_up_charger(pinfo);
 		break;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	default:
+		break;
+#endif
 	}
 	return NOTIFY_DONE;
 }
@@ -4474,6 +4484,9 @@ static enum power_supply_property battery_properties[] = {
 #endif /*CONFIG_OPLUS_SHORT_USERSPACE*/
 #endif
 	POWER_SUPPLY_PROP_CAPACITY_LEVEL,
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	POWER_SUPPLY_PROP_TIME_TO_FULL_NOW,
+#endif
 };
 
 

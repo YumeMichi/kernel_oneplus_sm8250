@@ -1,4 +1,5 @@
 #include <linux/sched.h>
+#include <linux/ctype.h>
 #ifdef CONFIG_OPLUS_FEATURE_IM
 #include <linux/im/im.h>
 #endif
@@ -8,21 +9,27 @@
 
 #define TOPAPP 4
 #define MIN_BOOST_VLAUE 15
-#define WEB_ID_MAX 8
-#define CHILD_MAX 3
+#define CHILD_MAX 10
 
 static int webview_debug = 0;
 module_param_named(debug,webview_debug,uint,0644);
 static struct web_target {
-       char val[16];
+       char val[TASK_COMM_LEN + 1];
        char* desc[CHILD_MAX];
-} web_target [WEB_ID_MAX] = {
+} web_target [] = {
        {"cent.mm:toolsmp", {"Chrome_InProc", "Compositor"}},
        {"m.taobao.taobao", {"Chrome_IOThread", "Chrome_ChildIOT", "Chrome_InProc"}},
        {"vilege_process0", {"Chrome_ChildIOT", "Compositor", "CrRendererMain"}},
        {"one:gpu_process", {"CrGpuMain"}},
        {"ieyou.train.ark", {"JNISurfaceTextu", "1.ui"}},
        {"v.douyu.android", {"Chrome_IOThread"}},
+       {"taobao.idlefish", {"JNISurfaceTextu", "1.ui"}},
+       {"encent.mm:tools", {"VizCompositorTh", "Chrome_ChildIOT", "Chrome_InProcGp", "Chrome_InProcRe", "Compositor", "Chrome_IOThread", "JavaBridge"}},
+       {"com.tencent.mm",  {"VizCompositorTh", "Chrome_ChildIOT", "Chrome_InProcGp", "Chrome_InProcRe", "Compositor"}},
+       {"ocessService0:0", {"CrRendererMain", "Compositor", "Chrome_ChildIOT"}},
+       {"com.oplus.vip", {"VizWebView", "Chrome_ChildIOT"}},
+       /* use "^X" to represent '0' '1' '2' ... */
+       {"nt.mm:appbrand^X", {"VizCompositorTh", "Chrome_IOThread", "Chrome_InProcGp", "Chrome_InProcRe", "Compositor"}},
 };
 
 bool is_top(struct task_struct *p)
@@ -45,31 +52,34 @@ bool is_top(struct task_struct *p)
 void task_rename_hook(struct task_struct *p)
 {
 	struct task_struct *leader = p->group_leader;
-	int im_flag = IM_WEBVIEW;
-	char *buf = p->comm;
-	int i = 0, j = 0;
-	size_t tlen = 0;
+	char *p_comm = p->comm;
+	const char *mark = "^X";
+	int m_len = strlen(mark);
+	int c_len = strlen(leader->comm);
+	int i, j;
 
-	for (i = 0; i < WEB_ID_MAX; ++i) {
-		tlen = strlen(web_target[i].val);
-		if (tlen == 0)
-			break;
+	for (i = 0; i < ARRAY_SIZE(web_target); i++) {
+		struct web_target *target = &web_target[i];
+		int t_len = strlen(target->val);
+		char *endl = &target->val[t_len - m_len];
 
-		if (strstr(leader->comm, web_target[i].val)) {
+		if (!strncmp(leader->comm, target->val, TASK_COMM_LEN) ||
+			(!strncmp(endl, mark, m_len) && c_len > 0 &&
+				isdigit(leader->comm[c_len - 1]) &&
+				!strncmp(leader->comm, target->val, t_len - m_len))) {
 #if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
-			for (j = 0; j < CHILD_MAX; ++j) {
-				char *temp = web_target[i].desc[j];
-				if (!temp)
+			for (j = 0; j < CHILD_MAX; j++) {
+				if (!target->desc[j])
 					break;
 
-				if ((p->prio <= DEFAULT_PRIO) && strstr(buf, temp)) {
-					oplus_set_im_flag(p, im_flag);
+				if (p->prio <= DEFAULT_PRIO && !strncmp(p_comm, target->desc[j], TASK_COMM_LEN)) {
+					oplus_set_im_flag(p, IM_WEBVIEW);
 					if(webview_debug) {
 						pr_info("record webview: pid=%d comm=%s prio=%d leader_pid=%d leader_comm=%s\n",
-						p->pid, buf, p->prio, leader->pid, leader->comm);
+						p->pid, p->comm, p->prio, leader->pid, leader->comm);
 					}
 					break;
-				} else if( oplus_get_im_flag(p) == IM_WEBVIEW) {
+				} else if(oplus_get_im_flag(p) == IM_WEBVIEW) {
 					oplus_unset_im_flag(p, IM_WEBVIEW);
 				}
 			}
@@ -77,7 +87,6 @@ void task_rename_hook(struct task_struct *p)
 			break;
 		}
 	}
-
 }
 
 bool is_webview(struct task_struct *p)

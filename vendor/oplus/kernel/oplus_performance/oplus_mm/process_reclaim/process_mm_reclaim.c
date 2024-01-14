@@ -151,6 +151,16 @@ int is_reclaim_should_cancel(struct mm_walk *walk)
 	return __is_reclaim_should_cancel(task, mm);
 }
 
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+/*
+ * Because there may be a mix of hugepages and small pages,
+ * use 2 * SWAP_CLUSTER_MAX conservatively.
+ * FIXME: use CHP_SWAP_CLUSTER_MAX?
+ */
+#define ISOLATED_MAX_PAGES (2 * SWAP_CLUSTER_MAX)
+#else
+#define ISOLATED_MAX_PAGES SWAP_CLUSTER_MAX
+#endif
 static int mm_reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 		unsigned long end, struct mm_walk *walk)
 {
@@ -164,10 +174,12 @@ static int mm_reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 	int reclaimed;
 	int ret = 0;
 
+#ifndef CONFIG_CONT_PTE_HUGEPAGE
 #ifdef CONFIG_OPLUS_SYSTEM_KERNEL_QCOM
 	split_huge_pmd(vma, addr, pmd);
 #else
 	split_huge_pmd(vma, pmd, addr);
+#endif
 #endif
 	if (pmd_trans_unstable(pmd) || !rp->nr_to_reclaim)
 		return 0;
@@ -179,9 +191,79 @@ cont:
 		if (!pte_present(ptent))
 			continue;
 
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+		if (pte_cont(ptent)) {
+			unsigned long next = pte_cont_addr_end(addr, end);
+
+			if (next - addr != HPAGE_CONT_PTE_SIZE) {
+				goto skip;  /* ignore reclaim for partial cont_pte */
+			} else {
+				page = vm_normal_page(vma, addr, ptent);
+				if (!page)
+					goto skip;
+
+				CHP_BUG_ON(!ContPteHugePageHead(page));
+				/*
+				 * do not reclaim page in active lru list
+				 */
+				if (rp->inactive_lru && (PageActive(page) ||
+							PageUnevictable(page)))
+					goto skip;
+
+				if (isolate_lru_page(page))
+					goto skip;
+
+				/*
+				 * MADV_FREE clears pte dirty bit and then marks the page
+				 * lazyfree (clear SwapBacked). Inbetween if this lazyfreed page
+				 * is touched by user then it becomes dirty.  PPR in
+				 * shrink_page_list in try_to_unmap finds the page dirty, marks
+				 * it back as PageSwapBacked and skips reclaim. This can cause
+				 * isolated count mismatch.
+				 */
+				if (PageAnon(page) && !PageSwapBacked(page)) {
+					putback_lru_page(page);
+					goto skip;
+				}
+
+				list_add(&page->lru, &page_list);
+#ifdef CONFIG_OPLUS_SYSTEM_KERNEL_QCOM
+				/*
+				 * only qualcomm need inc isolate count; mtk do it itself.
+				 */
+				mod_node_page_state(page_pgdat(page), NR_ISOLATED_ANON + page_is_file_cache(page),
+						compound_nr(page));
+#endif
+				isolated += compound_nr(page);
+				rp->nr_scanned += compound_nr(page);
+				if ((isolated >= ISOLATED_MAX_PAGES) || !rp->nr_to_reclaim)
+					break;
+			}
+skip:
+			pte += (next - PAGE_SIZE - addr)/PAGE_SIZE;
+			addr = next - PAGE_SIZE;
+			continue;
+		}
+#endif /* CONFIG_CONT_PTE_HUGEPAGE */
+
 		page = vm_normal_page(vma, addr, ptent);
 		if (!page)
 			continue;
+
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+		if (PageTransCompound(page)) {
+			pr_err_ratelimited("%s comm:%s pid:%d -> non_cont pte thp reclaim page:%lx "
+					   "PageHead:%d compound_mapcount:%d page_mapcount:%d ref_count:%d \n",
+						__func__, current->comm, current->pid, page, PageHead(page),
+						compound_mapcount(page), page_mapcount(page), page_ref_count(page));
+
+#if CONFIG_PROCESS_RECLAIM_DEBUG
+			atomic64_inc(&perf_stat.process_reclaim_double_map_cnt);
+#endif
+
+			continue;
+		}
+#endif /* CONFIG_CONT_PTE_HUGEPAGE */
 
 		/*
 		 * do not reclaim page in active lru list
@@ -216,7 +298,7 @@ cont:
 #endif
 		isolated++;
 		rp->nr_scanned++;
-		if ((isolated >= SWAP_CLUSTER_MAX) || !rp->nr_to_reclaim)
+		if ((isolated >= ISOLATED_MAX_PAGES) || !rp->nr_to_reclaim)
 			break;
 	}
 	pte_unmap_unlock(pte - 1, ptl);

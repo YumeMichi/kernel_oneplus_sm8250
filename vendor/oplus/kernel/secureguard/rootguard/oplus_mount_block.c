@@ -45,26 +45,26 @@ int oplus_mount_block(const char __user *dir_name, unsigned long flags)
  	char dname[16] = {0};
 	if (dir_name != NULL && copy_from_user(dname,dir_name,8) == 0){
 		if ((!strncmp(dname, "/system", 8) || !strncmp(dname, "/vendor", 8))&& !(flags & MS_RDONLY)
-			&& (is_normal_boot_mode())) {
+			&& (is_normal_boot_mode()) && !is_unlocked()) {
 			printk(KERN_ERR "[OPLUS]System partition is not permitted to be mounted as readwrite\n");
 #ifdef CONFIG_OPLUS_KEVENT_UPLOAD
-		printk(KERN_ERR "do_mount:kevent_send_to_user\n");
+			printk(KERN_ERR "do_mount:kevent_send_to_user\n");
 
-		dcs_event = (struct kernel_packet_info*)dcs_stack;
-		dcs_event_payload = dcs_stack +
-		sizeof(struct kernel_packet_info);
+			dcs_event = (struct kernel_packet_info*)dcs_stack;
+			dcs_event_payload = dcs_stack +
+			sizeof(struct kernel_packet_info);
 
-		dcs_event->type = 2;
+			dcs_event->type = 2;
 
-		strncpy(dcs_event->log_tag, dcs_event_tag,
-			sizeof(dcs_event->log_tag));
-		strncpy(dcs_event->event_id, dcs_event_id,
-			sizeof(dcs_event->event_id));
+			strncpy(dcs_event->log_tag, dcs_event_tag,
+				sizeof(dcs_event->log_tag));
+			strncpy(dcs_event->event_id, dcs_event_id,
+				sizeof(dcs_event->event_id));
 
-		dcs_event->payload_length = snprintf(dcs_event_payload, 256, "partition@@system");
-		if (dcs_event->payload_length < 256) {
-			dcs_event->payload_length += 1;
-		}
+			dcs_event->payload_length = snprintf(dcs_event_payload, 256, "partition@@system");
+			if (dcs_event->payload_length < 256) {
+				dcs_event->payload_length += 1;
+			}
 
 		kevent_send_to_user(dcs_event);
 #endif /* CONFIG_OPLUS_KEVENT_UPLOAD */

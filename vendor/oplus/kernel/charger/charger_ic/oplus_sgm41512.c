@@ -34,35 +34,73 @@
 #include <soc/oplus/system/boot_mode.h>
 #include "../oplus_chg_ops_manager.h"
 #include "../voocphy/oplus_voocphy.h"
-#include "oplus_discrete_charger.h"
 #include "oplus_sgm41512.h"
+#include "../oplus_chg_track.h"
 #include <linux/pm_wakeup.h>
 
+#ifdef CONFIG_OPLUS_CHARGER_MTK
+#include <mt-plat/mtk_boot_common.h>
+#include <tcpm.h>
+#include <tcpci.h>
+#else
+#include "oplus_discrete_charger.h"
+#endif
+
+#ifdef CONFIG_OPLUS_CHARGER_MTK
+#ifdef CONFIG_OPLUS_CHARGER_MTK6789S
+extern void oplus_mt6789_usbtemp_set_cc_open(void);
+extern void oplus_mt6789_usbtemp_set_typec_sinkonly(void);
+extern bool oplus_ccdetect_check_is_gpio(struct oplus_chg_chip *chip);
+#endif
+extern void mt_set_chargerid_switch_val(int value);
+extern int mt_get_chargerid_switch_val(void);
+extern int oplus_get_otg_online_status(void);
+extern void set_charger_ic(int sel);
+extern void Charger_Detect_Release(void);
+extern int oplus_battery_meter_get_battery_voltage(void);
+extern struct oplus_chg_chip *g_oplus_chip;
+static int qpnp_get_prop_charger_voltage_now(void);
+static void oplus_set_usb_props_type(enum power_supply_type type);
+static struct iio_channel *chan_vbus;
+static const struct charger_properties sgm41512_chg_props = {
+	.alias_name = "sgm41512_chg",
+};
+
+enum {
+	CHARGER_NORMAL_CHG_CURVE,
+	CHARGER_FASTCHG_VOOC_AND_QCPD_CURVE,
+	CHARGER_FASTCHG_SVOOC_CURVE,
+};
+#endif
+
+#ifndef CONFIG_OPLUS_CHARGER_MTK
 extern void oplus_notify_device_mode(bool enable);
 extern bool oplus_get_otg_online_status_default(void);
-extern int qpnp_get_battery_voltage(void);
-extern int opchg_get_real_charger_type(void);
-extern int smbchg_get_chargerid_switch_val(void);
 extern void smbchg_set_chargerid_switch_val(int value);
-extern int smbchg_get_chargerid_volt(void);
-extern int smbchg_get_boot_reason(void);
-extern int oplus_chg_get_shutdown_soc(void);
-extern int oplus_chg_backup_soc(int backup_soc);
 extern int oplus_chg_get_charger_subtype(void);
+extern int opchg_get_real_charger_type(void);
+extern int smbchg_get_chargerid_volt(void);
+extern int smbchg_get_chargerid_switch_val(void);
+extern int smbchg_get_boot_reason(void);
+extern int qpnp_get_battery_voltage(void);
+extern int oplus_chg_get_shutdown_soc(void);
 extern int oplus_chg_set_pd_config(void);
 extern int oplus_chg_set_qc_config(void);
+extern int oplus_chg_backup_soc(int backup_soc);
 extern int oplus_sm8150_get_pd_type(void);
-extern int oplus_chg_enable_qc_detect(void);
-extern void oplus_get_usbtemp_volt(struct oplus_chg_chip *chip);
-extern void oplus_set_typec_sinkonly(void);
-extern bool oplus_usbtemp_condition(void);
 extern void oplus_set_typec_cc_open(void);
-extern void oplus_set_pd_active(int active);
+extern void oplus_set_typec_sinkonly(void);
+extern int qpnp_get_prop_ibus_now(void);
+extern int oplus_chg_enable_qc_detect(void);
 extern void oplus_set_usb_props_type(enum power_supply_type type);
+extern int qpnp_get_prop_charger_voltage_now(void);
+#endif
+
+extern void oplus_get_usbtemp_volt(struct oplus_chg_chip *chip);
+extern bool oplus_usbtemp_condition(void);
+extern void oplus_set_pd_active(int active);
 extern int oplus_get_adapter_svid(void);
 extern void oplus_wake_up_usbtemp_thread(void);
-extern int qpnp_get_prop_charger_voltage_now(void);
-extern int qpnp_get_prop_ibus_now(void);
 extern void oplus_sgm41512_enable_gpio(bool enable);
 
 struct chip_sgm41512 {
@@ -100,6 +138,16 @@ struct chip_sgm41512 {
 	/*fix chgtype identify error*/
 	struct wakeup_source *keep_resume_ws;
 	wait_queue_head_t wait;
+
+#ifdef CONFIG_OPLUS_CHARGER_MTK
+	struct			notifier_block pd_nb;
+	struct			tcpc_device *tcpc;
+	struct			power_supply *psy;
+	struct			power_supply_desc psy_desc;
+	struct			charger_device *chg_dev;
+	struct			charger_properties chg_props;
+	const char 		*chg_dev_name;
+#endif
 };
 
 static struct chip_sgm41512 *charger_ic = NULL;
@@ -115,6 +163,39 @@ static void sgm41512_get_bc12(struct chip_sgm41512 *chip);
 static bool dumpreg_by_irq = 0;
 
 static void oplus_chg_wakelock(struct chip_sgm41512 *chip, bool awake);
+
+#ifdef CONFIG_OPLUS_CHARGER_MTK
+#define CDP_TIMEOUT			30
+extern void Charger_Detect_Init(void);
+extern bool is_usb_rdy(void);
+static bool hw_bc12_init(void)
+{
+	static int timeout = CDP_TIMEOUT;
+	static bool first_connect = true;
+
+	if (first_connect == true) {
+		/* add make sure USB Ready */
+		if (is_usb_rdy() == false) {
+			pr_err("CDP, block\n");
+			while (is_usb_rdy() == false && timeout > 0) {
+				msleep(10);
+				timeout--;
+			}
+			if (timeout == 0) {
+				pr_err("CDP, timeout\n");
+				return false;
+			} else {
+				pr_err("CDP, free, timeout:%d\n", timeout);
+			}
+		} else {
+			pr_err("CDP, PASS\n");
+		}
+		first_connect = false;
+	}
+
+	return true;
+}
+#endif
 
 static int __sgm41512_read_reg(struct chip_sgm41512 *chip, int reg, int *data)
 {
@@ -326,7 +407,11 @@ int sgm41512_get_vbus_voltage(void)
 
 int sgm41512_get_ibus_current(void)
 {
+#ifdef CONFIG_OPLUS_CHARGER_MTK
+	return 0;
+#else
 	return qpnp_get_prop_ibus_now();
+#endif
 }
 
 int sgm41512_input_current_limit_write(int current_ma)
@@ -765,9 +850,20 @@ bool sgm41512_get_power_gd(void)
 	return power_gd;
 }
 
+#define OTG_COMPLETELY_READY_FLAG	3
+
 static bool sgm41512_chg_is_usb_present(void)
 {
+#ifdef CONFIG_OPLUS_CHARGER_MTK
+	struct oplus_chg_chip *g_oplus_chip = oplus_chg_get_chg_struct();
+
+	if ((oplus_ccdetect_check_is_gpio(g_oplus_chip) == true
+			&& oplus_get_otg_online_status() == OTG_COMPLETELY_READY_FLAG)
+			|| (oplus_ccdetect_check_is_gpio(g_oplus_chip) == false
+			&& oplus_get_otg_online_status())) {
+#else
 	if (oplus_get_otg_online_status_default()) {
+#endif
 		chg_err("otg,return false");
 		return false;
 	}
@@ -905,6 +1001,12 @@ int sgm41512_otg_enable(void)
 		chg_err("Couldn't sgm41512_otg_enable  rc = %d\n", rc);
 	}
 
+#ifdef CONFIG_OPLUS_CHARGER_MTK
+	if (g_oplus_chip && g_oplus_chip->usb_psy)
+		power_supply_changed(g_oplus_chip->usb_psy);
+	else
+		chg_err("g_oplus_chip->usb_psy is null notify usb failed\n");
+#endif
 	return rc;
 }
 
@@ -928,6 +1030,13 @@ int sgm41512_otg_disable(void)
 	}
 
 	sgm41512_set_wdt_timer(REG05_SGM41512_WATCHDOG_TIMER_DISABLE);
+
+#ifdef CONFIG_OPLUS_CHARGER_MTK
+	if (g_oplus_chip && g_oplus_chip->usb_psy)
+		power_supply_changed(g_oplus_chip->usb_psy);
+	else
+		chg_err("g_oplus_chip->usb_psy is null notify usb failed\n");
+#endif
 
 	return rc;
 }
@@ -1342,6 +1451,14 @@ int sgm41512_set_iindet(void)
 		return 0;
 	}
 
+#ifdef CONFIG_OPLUS_CHARGER_MTK
+	if (hw_bc12_init() == false) {
+		return -1;
+	}
+	Charger_Detect_Init();
+	msleep(10);
+#endif
+
 	rc = sgm41512_config_interface(chip, REG07_SGM41512_ADDRESS,
 			REG07_SGM41512_IINDET_EN_MASK,
 			REG07_SGM41512_IINDET_EN_FORCE_DET);
@@ -1432,6 +1549,7 @@ void sgm41512_vooc_timeout_callback(bool vbus_rising)
 
 	chip->power_good = vbus_rising;
 	if (!vbus_rising) {
+		sgm41512_really_suspend_charger(false);
 		sgm41512_request_dpdm(chip, false);
 		chip->bc12_done = false;
 		chip->bc12_retried = 0;
@@ -1557,6 +1675,148 @@ static int sgm41512_get_charger_type(void)
 	return chip->oplus_charger_type;
 }
 
+#ifdef CONFIG_OPLUS_CHARGER_MTK
+static void oplus_notify_device_mode(bool enable)
+{
+	return;
+}
+
+static int oplus_chg_set_qc_config(void)
+{
+	return 0;
+}
+
+static int oplus_sgm41512_chg_get_charger_subtype(void)
+{
+	return CHARGER_SUBTYPE_DEFAULT;
+}
+
+static int oplus_chg_set_pd_config(void)
+{
+	return 0;
+}
+
+static int oplus_sm8150_get_pd_type(void)
+{
+	return 0;
+}
+
+static int oplus_chg_backup_soc(int backup_soc)
+{
+	return 0;
+}
+
+static int oplus_chg_get_shutdown_soc(void)
+{
+	return 0;
+}
+
+static int smbchg_get_chargerid_volt(void)
+{
+	return 0;
+}
+
+static int oplus_get_boot_reason(void)
+{
+	return 0;
+}
+
+static int oplus_chg_enable_qc_detect(void)
+{
+	return 0;
+}
+
+static int qpnp_get_prop_charger_voltage_now(void)
+{
+	int ret = 0;
+	int val = 0;
+
+	if (!IS_ERR(chan_vbus)) {
+		ret = iio_read_channel_processed(chan_vbus, &val);
+		val = val * 10;
+		if (ret < 0)
+			chg_err("[%s]read fail,ret=%d\n", __func__, ret);
+	} else {
+		chg_err("[%s]chan error\n", __func__);
+		ret = -ENODEV;
+	}
+
+	pr_info("%s get vbus voltage=%d\n", __func__, val);
+
+	return val;
+}
+
+static void oplus_set_usb_props_type(enum power_supply_type type)
+{
+	int ret = 0;
+	union power_supply_propval propval;
+	static struct power_supply *psy;
+
+	/* Get chg type det power supply */
+	psy = power_supply_get_by_name("charger");
+	if (!psy) {
+		psy = power_supply_get_by_name("sgm41512");
+		if (IS_ERR_OR_NULL(psy)) {
+			chg_err("%s get power supply fail\n", __func__);
+			return;
+		}
+	}
+
+	/* inform chg det power supply */
+	propval.intval = sgm41512_get_bus_gd();
+	ret = power_supply_set_property(psy, POWER_SUPPLY_PROP_ONLINE, &propval);
+	if (ret < 0)
+		chg_err("%s psy online fail(%d)\n", __func__, ret);
+
+	propval.intval = type;
+	ret = power_supply_set_property(psy,
+			POWER_SUPPLY_PROP_CHARGE_TYPE, &propval);
+	if (ret < 0)
+		chg_err("%s psy type fail(%d)\n", __func__, ret);
+	chg_err("%s power supply changed\n", __func__);
+	power_supply_changed(psy);
+	return;
+}
+
+static void oplus_mt_power_off(void)
+{
+	if (!g_oplus_chip) {
+		chg_err("oplus_chip not ready!\n");
+		return;
+	}
+
+	if (g_oplus_chip->ac_online != true)
+		kernel_power_off();
+	else
+		chg_err("ac_online is true, return!\n");
+}
+
+static void sgm41512_oplus_chg_choose_gauge_curve(int index_curve)
+{
+	static last_curve_index = -1;
+	int target_index_curve = -1;
+
+	if (index_curve == CHARGER_SUBTYPE_QC ||
+	    index_curve == CHARGER_SUBTYPE_PD ||
+	    index_curve == CHARGER_SUBTYPE_FASTCHG_VOOC) {
+		target_index_curve = CHARGER_FASTCHG_VOOC_AND_QCPD_CURVE;
+	} else if (index_curve == 0) {
+		target_index_curve = CHARGER_NORMAL_CHG_CURVE;
+	} else {
+		target_index_curve = CHARGER_FASTCHG_SVOOC_CURVE;
+	}
+
+	printk(KERN_ERR "%s: index_curve() =%d  target_index_curve =%d last_curve_index =%d",
+		__func__, index_curve, target_index_curve, last_curve_index);
+
+	if (target_index_curve != last_curve_index) {
+		oplus_gauge_set_power_sel(target_index_curve);
+		last_curve_index = target_index_curve;
+	}
+	return;
+}
+#endif
+
 struct oplus_chg_operations  sgm41512_chg_ops = {
 	.dump_registers = sgm41512_dump_registers,
 	.kick_wdt = sgm41512_kick_wdt,
@@ -1581,18 +1841,29 @@ struct oplus_chg_operations  sgm41512_chg_ops = {
 	.set_charging_term_disable = sgm41512_set_chging_term_disable,
 	.check_charger_resume = sgm41512_check_charger_resume,
 	.get_chargerid_volt = smbchg_get_chargerid_volt,
+#ifdef CONFIG_OPLUS_CHARGER_MTK
+	.set_chargerid_switch_val = mt_set_chargerid_switch_val,
+	.get_chargerid_switch_val = mt_get_chargerid_switch_val,
+	.get_boot_reason = oplus_get_boot_reason,
+	.get_charger_subtype = oplus_sgm41512_chg_get_charger_subtype,
+	.get_instant_vbatt = oplus_battery_meter_get_battery_voltage,
+	.set_power_off = oplus_mt_power_off,
+	.get_platform_gauge_curve = sgm41512_oplus_chg_choose_gauge_curve,
+#else
 	.set_chargerid_switch_val = smbchg_set_chargerid_switch_val,
 	.get_chargerid_switch_val = smbchg_get_chargerid_switch_val,
+	.get_real_charger_type = opchg_get_real_charger_type,
+	.get_instant_vbatt = qpnp_get_battery_voltage,
+	.get_boot_reason = smbchg_get_boot_reason,
+	.get_charger_subtype = oplus_chg_get_charger_subtype,
+#endif
 	.need_to_check_ibatt = sgm41512_need_to_check_ibatt,
 	.get_chg_current_step = sgm41512_get_chg_current_step,
 	.get_charger_type = sgm41512_get_charger_type,
-	.get_real_charger_type = opchg_get_real_charger_type,
 	.get_charger_volt = sgm41512_get_vbus_voltage,
 	.get_charger_current = sgm41512_get_ibus_current,
 	.check_chrdet_status = sgm41512_chg_is_usb_present,
-	.get_instant_vbatt = qpnp_get_battery_voltage,
 	.get_boot_mode = get_boot_mode,
-	.get_boot_reason = smbchg_get_boot_reason,
 	.get_rtc_soc = oplus_chg_get_shutdown_soc,
 	.set_rtc_soc = oplus_chg_backup_soc,
 #ifdef CONFIG_OPLUS_SHORT_C_BATT_CHECK
@@ -1601,7 +1872,6 @@ struct oplus_chg_operations  sgm41512_chg_ops = {
 #ifdef CONFIG_OPLUS_RTC_DET_SUPPORT
 	.check_rtc_reset = rtc_reset_check,
 #endif
-	.get_charger_subtype = oplus_chg_get_charger_subtype,
 	.oplus_chg_pd_setup = oplus_chg_set_pd_config,
 	.set_qc_config = oplus_chg_set_qc_config,
 	.oplus_chg_get_pd_type = oplus_sm8150_get_pd_type,
@@ -1609,8 +1879,13 @@ struct oplus_chg_operations  sgm41512_chg_ops = {
 	.input_current_write_without_aicl = sgm41512_input_current_limit_without_aicl,
 	.oplus_chg_wdt_enable = sgm41512_wdt_enable,
 	.get_usbtemp_volt = oplus_get_usbtemp_volt,
+#ifdef CONFIG_OPLUS_CHARGER_MTK6789S
+	.set_typec_cc_open = oplus_mt6789_usbtemp_set_cc_open,
+	.set_typec_sinkonly = oplus_mt6789_usbtemp_set_typec_sinkonly,
+#else
 	.set_typec_sinkonly = oplus_set_typec_sinkonly,
 	.set_typec_cc_open = oplus_set_typec_cc_open,
+#endif
 	.really_suspend_charger = sgm41512_really_suspend_charger,
 	.oplus_usbtemp_monitor_condition = oplus_usbtemp_condition,
 	.vooc_timeout_callback = sgm41512_vooc_timeout_callback,
@@ -1650,6 +1925,14 @@ static int sgm41512_parse_dt(struct chip_sgm41512 *chip)
 				         chip->enable_gpio);
 			}
 	}
+
+#ifdef CONFIG_OPLUS_CHARGER_MTK
+	if (of_property_read_string(chip->client->dev.of_node, "charger_name", &chip->chg_dev_name) < 0) {
+		chip->chg_dev_name = "primary_chg";
+		chg_err("no charger name\n");
+	}
+#endif
+
 	chip->use_voocphy = of_property_read_bool(chip->client->dev.of_node, "qcom,use_voocphy");
 	chg_err("use_voocphy=%d\n", chip->use_voocphy);
 	return ret;
@@ -1658,7 +1941,7 @@ static int sgm41512_parse_dt(struct chip_sgm41512 *chip)
 static int sgm41512_request_dpdm(struct chip_sgm41512 *chip, bool enable)
 {
 	int ret = 0;
-
+#ifndef CONFIG_OPLUS_CHARGER_MTK
 	if (!chip)
 		return 0;
 
@@ -1695,6 +1978,7 @@ static int sgm41512_request_dpdm(struct chip_sgm41512 *chip, bool enable)
 		}
 	}
 	mutex_unlock(&chip->dpdm_lock);
+#endif
 	return ret;
 }
 
@@ -1719,6 +2003,12 @@ static void sgm41512_bc12_retry_work(struct work_struct *work)
 		if (sgm41512_get_iindet()) {
 			chg_err("BC1.2 complete, delay_cnt=%d\n", chip->bc12_delay_cnt);
 			sgm41512_get_bc12(chip);
+#ifdef CONFIG_OPLUS_CHARGER_MTK
+			if ((chip->oplus_charger_type == POWER_SUPPLY_TYPE_USB) ||
+				(chip->oplus_charger_type == POWER_SUPPLY_TYPE_USB_CDP)) {
+				Charger_Detect_Release();
+			}
+#endif
 		} else {
 			chg_err("BC1.2 not complete delay 50ms,delay_cnt=%d\n", chip->bc12_delay_cnt);
 			schedule_delayed_work(&chip->bc12_retry_work, round_jiffies_relative(msecs_to_jiffies(50)));
@@ -1864,7 +2154,14 @@ static irqreturn_t sgm41512_irq_handler(int irq, void *data)
 	if (!chip)
 		return IRQ_HANDLED;
 
+#ifdef CONFIG_OPLUS_CHARGER_MTK
+	if ((oplus_ccdetect_check_is_gpio(g_oplus_chip) == true
+			&& oplus_get_otg_online_status() == OTG_COMPLETELY_READY_FLAG)
+			|| (oplus_ccdetect_check_is_gpio(g_oplus_chip) == false
+			&& oplus_get_otg_online_status())) {
+#else
 	if (oplus_get_otg_online_status_default()) {
+#endif
 		chg_err("otg,ignore\n");
 		oplus_keep_resume_wakelock(chip, false);
 		chip->oplus_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
@@ -1906,6 +2203,7 @@ static irqreturn_t sgm41512_irq_handler(int irq, void *data)
 
 
 	if (!prev_pg && chip->power_good) {
+		oplus_chg_track_check_wired_charging_break(1);
 		oplus_chg_wakelock(chip, true);
 		sgm41512_request_dpdm(chip, true);
 		chip->bc12_done = false;
@@ -1915,7 +2213,6 @@ static irqreturn_t sgm41512_irq_handler(int irq, void *data)
 			oplus_voocphy_set_adc_enable(true);
 		}
 		sgm41512_set_wdt_timer(REG05_SGM41512_WATCHDOG_TIMER_40S);
-		oplus_wake_up_usbtemp_thread();
 		if (chip->oplus_charger_type == POWER_SUPPLY_TYPE_UNKNOWN) {
 			sgm41512_get_bc12(chip);
 		}
@@ -1941,13 +2238,13 @@ static irqreturn_t sgm41512_irq_handler(int irq, void *data)
 		chip->oplus_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
 		oplus_set_usb_props_type(chip->oplus_charger_type);
 		oplus_vooc_reset_fastchg_after_usbout();
+		oplus_chg_track_check_wired_charging_break(0);
 		if (oplus_vooc_get_fastchg_started() == false) {
 			oplus_chg_set_chargerid_switch_val(0);
 			oplus_chg_clear_chargerid_info();
 		}
 		oplus_chg_set_charger_type_unknown();
 		oplus_chg_wake_update_work();
-		oplus_wake_up_usbtemp_thread();
 		oplus_notify_device_mode(false);
 		if (chip->use_voocphy) {
 			oplus_voocphy_set_adc_enable(false);
@@ -1961,6 +2258,7 @@ static irqreturn_t sgm41512_irq_handler(int irq, void *data)
 		chip->bc12_delay_cnt = 0;
 		goto POWER_CHANGE;
 	}
+	oplus_wake_up_usbtemp_thread();
 	sgm41512_get_bc12(chip);
 POWER_CHANGE:
 	if(dumpreg_by_irq)
@@ -2020,6 +2318,190 @@ static void sgm41512_init_work_handler(struct work_struct *work)
 	return;
 }
 
+#ifdef CONFIG_OPLUS_CHARGER_MTK
+static enum power_supply_usb_type sgm41512_charger_usb_types[] = {
+	POWER_SUPPLY_USB_TYPE_UNKNOWN,
+	POWER_SUPPLY_USB_TYPE_SDP,
+	POWER_SUPPLY_USB_TYPE_DCP,
+	POWER_SUPPLY_USB_TYPE_CDP,
+	POWER_SUPPLY_USB_TYPE_C,
+	POWER_SUPPLY_USB_TYPE_PD,
+	POWER_SUPPLY_USB_TYPE_PD_DRP,
+	POWER_SUPPLY_USB_TYPE_APPLE_BRICK_ID
+};
+
+static enum power_supply_property sgm41512_charger_properties[] = {
+	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_TYPE,
+	POWER_SUPPLY_PROP_USB_TYPE,
+};
+
+static int sgm41512_charger_get_property(struct power_supply *psy,
+						   enum power_supply_property psp,
+						   union power_supply_propval *val)
+{
+	int ret = 0;
+	struct chip_sgm41512 *chip = charger_ic;
+	int power_good = 0;
+	int boot_mode = get_boot_mode();
+	switch (psp) {
+	case POWER_SUPPLY_PROP_ONLINE:
+		if (chip != NULL) {
+			power_good = sgm41512_get_bus_gd();
+		}
+
+		if (g_oplus_chip != NULL) {
+			if (g_oplus_chip->mmi_fastchg == 0)
+				power_good = 1;
+		}
+
+		if ((boot_mode == META_BOOT) || (oplus_vooc_get_fastchg_started() == true) ||
+		    (oplus_vooc_get_fastchg_to_normal() == true) ||
+		    (oplus_vooc_get_fastchg_to_warm() == true) ||
+		    (oplus_vooc_get_fastchg_dummy_started() == true) ||
+		    (oplus_vooc_get_adapter_update_status() == ADAPTER_FW_NEED_UPDATE) ||
+		    (oplus_vooc_get_btb_temp_over() == true)) {
+			power_good = 1;
+		}
+		pr_err("%s, power good (%d)\n", __func__, power_good);
+		val->intval = power_good;
+		break;
+	case POWER_SUPPLY_PROP_TYPE:
+	case POWER_SUPPLY_PROP_USB_TYPE:
+		if (boot_mode == META_BOOT) {
+			val->intval = POWER_SUPPLY_TYPE_USB;
+		} else {
+			val->intval = charger_ic->oplus_charger_type;
+		}
+		pr_err("%s, get chg_type (%d)\n", __func__, val->intval);
+		break;
+	default:
+		ret = -ENODATA;
+	}
+	return ret;
+}
+
+static char *sgm41512_charger_supplied_to[] = {
+	"battery",
+	"mtk-master-charger"
+};
+
+static const struct power_supply_desc sgm41512_charger_desc = {
+	.type			= POWER_SUPPLY_TYPE_USB,
+	.usb_types      = sgm41512_charger_usb_types,
+	.num_usb_types  = ARRAY_SIZE(sgm41512_charger_usb_types),
+	.properties 	= sgm41512_charger_properties,
+	.num_properties 	= ARRAY_SIZE(sgm41512_charger_properties),
+	.get_property		= sgm41512_charger_get_property,
+};
+
+static int sgm41512_chg_init_psy(struct chip_sgm41512 *chip)
+{
+	struct power_supply_config cfg = {
+		.drv_data = chip,
+		.of_node = chip->dev->of_node,
+		.supplied_to = sgm41512_charger_supplied_to,
+		.num_supplicants = ARRAY_SIZE(sgm41512_charger_supplied_to),
+	};
+
+	pr_err("%s\n", __func__);
+	memcpy(&chip->psy_desc, &sgm41512_charger_desc, sizeof(chip->psy_desc));
+	chip->psy_desc.name = "sgm41512";
+	chip->psy = devm_power_supply_register(chip->dev, &chip->psy_desc,
+						&cfg);
+	return IS_ERR(chip->psy) ? PTR_ERR(chip->psy) : 0;
+}
+
+static int pd_tcp_notifier_call(struct notifier_block *nb,
+				unsigned long event, void *data)
+{
+	struct tcp_notify *noti = data;
+	struct chip_sgm41512 * chip =
+		(struct chip_sgm41512 *)container_of(nb,
+		struct chip_sgm41512, pd_nb);
+
+	switch (event) {
+	case TCP_NOTIFY_TYPEC_STATE:
+		if (noti->typec_state.old_state == TYPEC_UNATTACHED &&
+		    noti->typec_state.new_state == TYPEC_ATTACHED_SNK) {
+			chg_err("USB Plug in\n");
+			power_supply_changed(chip->psy);
+		} else if (noti->typec_state.old_state == TYPEC_ATTACHED_SNK
+			&& noti->typec_state.new_state == TYPEC_UNATTACHED) {
+			chg_err("USB Plug out\n");
+			sgm41512_really_suspend_charger(false);
+			if (oplus_vooc_get_fast_chg_type() == CHARGER_SUBTYPE_FASTCHG_VOOC && oplus_chg_get_wait_for_ffc_flag() != true) {
+				chip->power_good = 0;
+				chip->bc12_done = false;
+				chip->bc12_retried = 0;
+				chip->bc12_delay_cnt = 0;
+				chip->oplus_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
+				sgm41512_disable_charging();
+				oplus_chg_set_charger_type_unknown();
+				oplus_vooc_set_fastchg_type_unknow();
+				oplus_set_usb_props_type(chip->oplus_charger_type);
+				oplus_vooc_reset_fastchg_after_usbout();
+				oplus_chg_clear_chargerid_info();
+				Charger_Detect_Release();
+				oplus_chg_wake_update_work();
+				chg_err("usb real remove vooc fastchg clear flag!\n");
+			}
+		}
+		break;
+	default:
+		break;
+	}
+	return NOTIFY_OK;
+}
+
+static int sgm41512_chgdet_en(bool en)
+{
+	struct oplus_chg_chip *chip = g_oplus_chip;
+
+	if (g_oplus_chip == NULL || g_oplus_chip->chg_ops == NULL
+		|| g_oplus_chip->chg_ops->get_charging_enable == NULL) {
+		return -1;
+	}
+	if (en) {
+		if (oplus_vooc_get_fastchg_to_normal() == false
+			&& oplus_vooc_get_fastchg_to_warm() == false) {
+			if (chip->authenticate
+				&& chip->mmi_chg
+				&& !chip->balancing_bat_stop_chg
+				&& (chip->charging_state != CHARGING_STATUS_FAIL)
+				&& oplus_vooc_get_allow_reading()
+				&& !oplus_is_rf_ftm_mode()) {
+				sgm41512_enable_charging();
+			} else {
+				chg_err("should not turn on charging here! \n");
+			}
+		}
+	} else {
+		sgm41512_disable_charging();
+		Charger_Detect_Release();
+		charger_ic->bc12_done = false;
+		charger_ic->bc12_retried = 0;
+		charger_ic->bc12_delay_cnt = 0;
+		charger_ic->oplus_charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
+		oplus_set_usb_props_type(charger_ic->oplus_charger_type);
+	}
+	return 0;
+}
+static int sgm41512_enable_chgdet(struct charger_device *chg_dev, bool en)
+{
+	int ret;
+
+	pr_notice("sgm41512_enable_chgdet:%d\n", en);
+	ret = sgm41512_chgdet_en(en);
+
+	return ret;
+}
+
+static struct charger_ops sgm41512_charger_ops = {
+	.enable_chg_type_det = sgm41512_enable_chgdet,
+};
+#endif
+
 #define INIT_WORK_NORMAL_DELAY 8000
 #define INIT_WORK_OTHER_DELAY 1000
 
@@ -2073,6 +2555,26 @@ static int sgm41512_charger_probe(struct i2c_client *client,
 		goto err_parse_dt;
 	}
 
+#ifdef CONFIG_OPLUS_CHARGER_MTK
+	/* Register charger device */
+	chip->chg_dev = charger_device_register(chip->chg_dev_name,
+						&client->dev, chip,
+						&sgm41512_charger_ops,
+						&sgm41512_chg_props);
+	if (IS_ERR_OR_NULL(chip->chg_dev)) {
+		pr_info("%s: register charger device  failed\n", __func__);
+		ret = PTR_ERR(chip->chg_dev);
+		return ret;
+	}
+
+	chan_vbus = devm_iio_channel_get(
+		&client->dev, "pmic_vbus_voltage");
+	if (IS_ERR(chan_vbus)) {
+		ret = PTR_ERR(chan_vbus);
+		chg_err("%s: pmic_battery_temp auxadc get fail, ret=%d\n", __func__, ret);
+	}
+#endif
+
 	sgm41512_enable_gpio_init(chip);
 
 	sgm41512_dump_registers();
@@ -2102,6 +2604,24 @@ static int sgm41512_charger_probe(struct i2c_client *client,
 
 	set_charger_ic(SGM41512);
 
+#ifdef CONFIG_OPLUS_CHARGER_MTK
+	ret = sgm41512_chg_init_psy(chip);
+	if (ret < 0) {
+		chg_err("failed to init power supply\n");
+	}
+
+	chip->tcpc = tcpc_dev_get_by_name("type_c_port0");
+	if (!chip->tcpc) {
+		chg_err("%s get tcpc device type_c_port0 fail\n", __func__);
+	}
+	chip->pd_nb.notifier_call = pd_tcp_notifier_call;
+	ret = register_tcp_dev_notifier(chip->tcpc, &chip->pd_nb,
+				TCP_NOTIFY_TYPE_ALL);
+	if (ret < 0) {
+		chg_err("register tcpc notifer fail\n");
+		ret = -EINVAL;
+	}
+#endif
 	chg_err("SGM41512 probe success.");
 
 	return 0;
@@ -2190,6 +2710,7 @@ static int sgm41512_suspend(struct i2c_client *client, pm_message_t mesg)
 
 static void sgm41512_charger_shutdown(struct i2c_client *client)
 {
+	sgm41512_otg_disable();
 }
 
 static struct of_device_id sgm41512_charger_match_table[] = {
@@ -2238,10 +2759,10 @@ int sgm41512_charger_init(void)
 {
 	int ret = 0;
 	chg_err(" init start\n");
-
+#ifndef CONFIG_OPLUS_CHARGER_MTK
 	/*SGM41512 is slave charger in Pikachu(21291) */
 	oplus_chg_ops_register("ext-sgm41512", &sgm41512_chg_ops);
-
+#endif
 	if (i2c_add_driver(&sgm41512_charger_driver) != 0) {
 		chg_err(" failed to register sgm41512 i2c driver.\n");
 	} else {

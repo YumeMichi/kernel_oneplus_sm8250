@@ -20,14 +20,15 @@
 #include "oplus_ir_core.h"
 #include "oplus_ir_spi.h"
 
-#define SPI_IR_MAX_SIZE            4096*1024 - 1 /*4M max size*/
-#define KOOKONG_IR_MIN_SIZE        8u
-#define ONESECOND                  1000000
-#define SPIFREQUENCY               5000000
-#define SPI_FREQ_MIN               999999
-#define SPI_FREQ_MAX               10000001
-#define SPI_DEFAULT_FREQ           5000000
-#define BITS_PER_BYTE              8
+#define SPI_IR_MAX_SIZE                4096*1024 - 1 /*4M max size*/
+#define SPI_IR_STACTIC_PAGE_MAX_SIZE   500000 /*5M spi send 800ms data byte*/
+#define KOOKONG_IR_MIN_SIZE            8u
+#define ONESECOND                      1000000
+#define SPIFREQUENCY                   5000000
+#define SPI_FREQ_MIN                   999999
+#define SPI_FREQ_MAX                   10000001
+#define SPI_DEFAULT_FREQ               5000000
+#define BITS_PER_BYTE                  8
 
 struct hw_spi_config_t {
 	u32 duty_cycle; /* 1/2 vule is 2, 1/3 value is 3 */
@@ -37,7 +38,9 @@ struct hw_spi_config_t {
 
 struct oplus_ir_spi_t {
 	u8 *tx_buf;
+	u8 *tx_static_buf;
 	struct page *page;
+	struct page *static_page;
 	struct spi_device *spi;
 	struct spi_transfer spi_tx_xfer;
 	struct hw_spi_config_t hw_config;
@@ -140,27 +143,23 @@ int ir_spi_file_write(void *priv, struct pattern_params *param, enum ir_interfac
 
 	spis_num = spi_total_num / BITS_PER_BYTE + BITS_PER_BYTE;
 
-	/*for ir debug*/
-	/*for (i = 0; i < param->size; i ++) {
-		pr_info("oplus_pwm_ir:kookong_ir_file_write pattern[%d] = %d\n", i, param->pattern[i]);
-	}
-	pr_info("oplus_ir_spi: transmit for %d uS at %d Hz", total_time, param->carrier_freq);
-	pr_info("oplus_ir_spi: spi_total_num=%d\n", spi_total_num);
-	pr_info("oplus_ir_spi: spi_wave_len=%d\n", spi_wave_len);
-	pr_info("oplus_ir_spi: spis_num=%d\n", spis_num);*/
+	pr_info("oplus_ir_spi: transmit for %u uS at %d Hz, spis_num is %u", total_time, param->carrier_freq, spis_num);
 
 	if (spis_num > SPI_IR_MAX_SIZE) {
 		pr_err("oplus_ir_spi: spis_num is too large!\n");
 		return -ELNRNG;
+	} else if (spis_num < SPI_IR_STACTIC_PAGE_MAX_SIZE) {
+		memset(ir_spi->tx_static_buf, 0, SPI_IR_STACTIC_PAGE_MAX_SIZE);
+		ir_spi->tx_buf = ir_spi->tx_static_buf;
+	} else {
+		order = get_order(spis_num);
+		ir_spi->page = alloc_pages(GFP_KERNEL, order);
+		if (!ir_spi->page) {
+			pr_err("oplus_ir_spi: Failed to alloc_pages!\n");
+			return -ENOMEM;
+		}
+		ir_spi->tx_buf = (u8*)page_address(ir_spi->page);
 	}
-
-	order = get_order(spis_num);
-	ir_spi->page = alloc_pages(GFP_KERNEL, order);
-	if (!ir_spi->page) {
-		pr_err("oplus_ir_spi: Failed to alloc_pages!\n");
-		return -ENOMEM;
-	}
-	ir_spi->tx_buf = (u8*)page_address(ir_spi->page);
 
 	ir_to_hw.duty_cycle = ir_spi->hw_config.duty_cycle;
 	ir_to_hw.hw_data = ir_spi->tx_buf;
@@ -177,16 +176,10 @@ int ir_spi_file_write(void *priv, struct pattern_params *param, enum ir_interfac
 
 	retval = oplus_ir_spi_write(ir_spi, spis_num);
 
-	/*for ir debug*/
-	/*if (spis_num != 0) {
-		pr_info("oplus_ir_spi data count is = %d\n", spis_num);
-		for(i = 0; i < spis_num; i ++) {
-			pr_info("oplus_ir_spi data[%d] = %d\n", i, ir_spi->tx_buf[i]);
-		}
-	}*/
-
 extit:
-	__free_pages(ir_spi->page, order);
+	if ((spis_num <= SPI_IR_MAX_SIZE) && (spis_num >= SPI_IR_STACTIC_PAGE_MAX_SIZE)) {
+		__free_pages(ir_spi->page, order);
+	}
 	return retval;
 }
 
@@ -197,6 +190,7 @@ static struct device_ops spi_ops = {
 static int oplus_ir_spi_probe(struct spi_device *spi)
 {
 	int ret = 0;
+	u32 order = 0;
 
 	struct oplus_ir_spi_t *oplus_ir_spi_data = NULL;
 
@@ -218,6 +212,14 @@ static int oplus_ir_spi_probe(struct spi_device *spi)
 	parse_hw_spi_config(&spi->dev, oplus_ir_spi_data);
 
 	spi_set_drvdata(spi, oplus_ir_spi_data);
+
+	order = get_order(SPI_IR_STACTIC_PAGE_MAX_SIZE);
+	oplus_ir_spi_data->static_page = alloc_pages(GFP_KERNEL, order);
+	if (!oplus_ir_spi_data->static_page) {
+		pr_err("oplus_ir_spi: Failed to alloc_pages!\n");
+		return -ENOMEM;
+	}
+	oplus_ir_spi_data->tx_static_buf = (u8*)page_address(oplus_ir_spi_data->static_page);
 
 end:
 	return ret;

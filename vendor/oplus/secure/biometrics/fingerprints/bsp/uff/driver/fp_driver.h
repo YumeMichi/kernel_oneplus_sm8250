@@ -8,6 +8,7 @@
 #include <linux/input.h>
 #include <linux/notifier.h>
 #include <linux/types.h>
+#include <linux/gpio/consumer.h>
 #include "include/oplus_fp_common.h"
 #include "include/fingerprint_event.h"
 #include "include/fp_health.h"
@@ -69,7 +70,7 @@ extern void mt_spi_disable_master_clk(struct spi_device *spidev);
 #include <linux/soc/qcom/panel_event_notifier.h>
 #endif
 
-#if defined(CONFIG_OPLUS_MTK_DRM_GKI_NOTIFY)
+#if defined(CONFIG_OPLUS_MTK_DRM_GKI_NOTIFY)  || defined(MTK_PLATFORM)
 #if defined(CONFIG_DRM_MEDIATEK_V2)
 #define oplus_register_notifier_client(source, pnotifier) mtk_disp_notifier_register(source, pnotifier);
 #else
@@ -146,17 +147,24 @@ struct fp_key {
 #define FP_IOC_REPORT_OLC_EVENT _IOW(FP_IOC_MAGIC, 24, struct fp_exception_info)
 #endif
 
+#define FP_IOC_RESET_GPIO_CTL_LOW _IO(FP_IOC_MAGIC, 25)
+#define FP_IOC_RESET_GPIO_CTL_HIGH _IO(FP_IOC_MAGIC, 26)
+#define FP_IOC_IRQ_GPIO_CTL_HIGH _IO(FP_IOC_MAGIC, 27)
+#define FP_IOC_IRQ_GPIO_CTL_LOW _IO(FP_IOC_MAGIC, 28)
+#define FP_IOC_NETLINK_INIT _IO(FP_IOC_MAGIC, 29)
+#define FP_IOC_RD_NETLINK_VALUE _IO(FP_IOC_MAGIC, 30)
+
+#define FP_IOC_FAULT_INJECT_BLOCK_MSG_CLEAN   _IO(FP_IOC_MAGIC, 401)
+#define FP_IOC_FAULT_INJECT_BLOCK_MSG_UP      _IO(FP_IOC_MAGIC, 402)
+#define FP_IOC_FAULT_INJECT_BLOCK_MSG_DOWN    _IO(FP_IOC_MAGIC, 403)
+#define FP_IOC_FAULT_INJECT_BLOCK_MSG_UIREADY _IO(FP_IOC_MAGIC, 404)
+
 // netlink function
 /************************************************/
 #define FP_NETLINK_ENABLE 1
 #define FP_NET_EVENT_FB_BLACK 2
 #define FP_NET_EVENT_FB_UNBLACK 3
 #define NETLINKROUTE 25
-
-
-
-/************************************************/
-
 /************************************************/
 struct fp_dev {
     dev_t            devt;
@@ -171,6 +179,8 @@ struct fp_dev {
     signed                irq_gpio;
     signed                reset_gpio;
     signed                pwr_gpio;
+    signed                gpio_intr3;
+    bool                  gpio_intr3_available;
     int                   irq;
     int                   irq_enabled;
     int                   clk_enabled;
@@ -195,9 +205,13 @@ struct fp_dev {
     struct pinctrl *pinctrl;
     struct pinctrl_state *pstate_default;
     struct pinctrl_state *pstate_spi;
+    struct pinctrl_state *pstate_cs_func;
+    struct pinctrl_state *pstate_cs_pull_down;
 #endif
     unsigned int   ldo_voltage;
     unsigned int   ldo_num;
+    struct gpio_desc *gpiod_reset;
+    struct gpio_desc *gpiod_intr3;
 };
 
 // dts function
@@ -211,16 +225,18 @@ int fp_power_reset(struct fp_dev *fp_dev);
 
 // hardware control
 int fp_hw_reset(struct fp_dev *fp_dev, unsigned int delay_ms);
+int fp_reset_gpio_ctl(struct fp_dev *fp_dev, uint32_t value);
 int fp_irq_num(struct fp_dev *fp_dev);
-
-// netlink funciton
-int  fp_netlink_init(void);
-void fp_netlink_exit(void);
+int fp_cs_ctl(struct fp_dev *fp_dev, uint32_t value);
 
 // feature
 void fp_cleanup_pwr_list(struct fp_dev *fp_dev);
 int  fp_parse_pwr_list(struct fp_dev *fp_dev);
 int  fp_parse_ftm_poweroff_flag(struct fp_dev *fp_dev);
+
+// intr3
+int fp_enable_intr3(struct fp_dev *fp_dev);
+int fp_disable_intr3(struct fp_dev *fp_dev);
 /************************************************/
 
 #endif /*__FP_DRIVER_H*/

@@ -5,7 +5,7 @@
 #define SEND_FINGERPRINT_EVENT_DISABLE (0)
 #define MAX_MESSAGE_SIZE (128)
 
-#define FP_DIRVER_NETLINK (1)
+#define FP_DRIVER_NETLINK (1)
 #define FP_DRIVER_INTERRUPT (2)
 
 typedef enum netlink_cmd {
@@ -54,4 +54,5 @@ int send_fingerprint_msg(int module, int event, void *data,
                              unsigned int size);
 int wait_fp_event(void *data, unsigned int size,
                            struct fingerprint_message_t **msg);
+void reset_fingerprint_msg(void);
 #endif //FINGERPRINT_EVENT_H

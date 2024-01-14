@@ -30,6 +30,7 @@
 #include <linux/errno.h>
 #include <linux/err.h>
 
+#include <linux/usb/typec.h>
 #include <linux/power_supply.h>
 #include "oplus_battery_sm6375.h"
 #include "../oplus_chg_module.h"
@@ -41,6 +42,7 @@
 extern int chg_init_done;
 extern int typec_dir;
 extern struct oplus_chg_chip *g_oplus_chip;
+extern void oplus_enable_device_mode(bool enable);
 //#define TYPEC_PM_OP
 
 /******************************************************************************
@@ -228,6 +230,26 @@ static struct en_gpio_item en_gpio_info[] = {
 	/*add more gpio here if need*/
 };
 
+struct typec_port {
+	unsigned int			id;
+	struct device			dev;
+	struct ida			mode_ids;
+
+	int				prefer_role;
+	enum typec_data_role		data_role;
+	enum typec_role			pwr_role;
+	enum typec_role			vconn_role;
+	enum typec_pwr_opmode		pwr_opmode;
+	enum typec_port_type		port_type;
+	struct mutex			port_type_lock;
+
+	enum typec_orientation		orientation;
+	struct typec_switch		*sw;
+	struct typec_mux		*mux;
+
+	const struct typec_capability	*cap;
+};
+
 struct sgm7220_info {
 	struct i2c_client  *i2c;
 	struct device  *dev_t;
@@ -259,11 +281,22 @@ struct sgm7220_info {
 	/*fix chgtype identify error*/
 	struct wakeup_source *keep_resume_ws;
 	wait_queue_head_t wait;
+
+	bool typec_port_support;
+	struct typec_capability typec_caps;
+	struct typec_port *typec_port;
+	struct typec_partner *partner;
+	struct typec_partner_desc partner_desc;
+	struct usb_pd_identity partner_identity;
 };
 
 bool __attribute__((weak)) oplus_get_otg_switch_status(void)
 {
 	return false;
+}
+
+void __attribute__((weak)) oplus_enable_device_mode(bool enable)
+{
 }
 
 struct sgm7220_info *gchip = NULL;
@@ -793,7 +826,7 @@ void oplus_notify_device_mode(bool enable)
 	struct sgm7220_info *info = gchip;
 
 	if (!info) {
-		pr_err("[%s]  sgm7220_info or oplus_chip is null\n", __func__);
+		oplus_enable_device_mode(enable);
 		return;
 	}
 
@@ -932,6 +965,12 @@ static void process_interrupt_register(struct sgm7220_info *info)
 	bool pre_attach = cur_attach;
 	bool attach_changed = false;
 	enum cable_state_type pre_state_type = info->type_c_param.attach_state;
+	struct typec_port *port = info->typec_port;
+
+	if (!port && !info && info->typec_port_support) {
+		pr_err("%s typec_port or sgm7220 chip info is NULL\n", __func__);
+		return;
+	}
 
 	ret = sgm7220_read_reg(info->i2c, REG_INT, &status);
 	if (ret < 0) {
@@ -979,12 +1018,27 @@ static void process_interrupt_register(struct sgm7220_info *info)
 		if (cur_attach) {
 			if (info->type_c_param.attach_state == CABLE_STATE_AS_DFP) {		//host
 				info->sink_src_mode = SRC_MODE;
+				if (info->typec_port_support) {
+					port->port_type = TYPEC_PORT_SRC;
+					port->pwr_role = TYPEC_SOURCE;
+					port->data_role = TYPEC_HOST;
+				}
 				oplus_typec_sink_insertion();
 			} else if (info->type_c_param.attach_state == CABLE_STATE_AS_UFP) {	//device
 				info->sink_src_mode = SINK_MODE;
+				if (info->typec_port_support) {
+					port->port_type = TYPEC_PORT_SNK;
+					port->pwr_role = TYPEC_SINK;
+					port->data_role = TYPEC_DEVICE;
+				}
 				oplus_typec_src_insertion();
 			} else if (info->type_c_param.attach_state == CABLE_STATE_TO_ACCESSORY){
 				info->sink_src_mode = AUDIO_ACCESS_MODE;
+				if (info->typec_port_support) {
+					port->port_type = TYPEC_PORT_DRP;
+					port->pwr_role = TYPEC_SINK;
+					port->data_role = TYPEC_DEVICE;
+				}
 				oplus_typec_ra_ra_insertion();
 				#ifdef OPLUS_ARCH_EXTENDS
 				if (info->headphone_det_support) {
@@ -992,6 +1046,27 @@ static void process_interrupt_register(struct sgm7220_info *info)
 					pr_err("%s this is audio access enter!\n", __func__);
 				}
 				#endif /* OPLUS_ARCH_EXTENDS */
+			}
+			if (info->typec_port_support) {
+				sysfs_notify(&port->dev.kobj, NULL, "port_type");
+				sysfs_notify(&port->dev.kobj, NULL, "power_role");
+				sysfs_notify(&port->dev.kobj, NULL, "data_role");
+
+				if (!info->partner) {
+					memset(&info->partner_identity, 0,
+							sizeof(info->partner_identity));
+					info->partner_desc.usb_pd = false;
+					info->partner_desc.accessory = TYPEC_ACCESSORY_NONE;
+					info->partner = typec_register_partner(info->typec_port,
+							&info->partner_desc);
+
+					if (IS_ERR(info->partner)) {
+						ret = PTR_ERR(info->partner);
+						pr_err("%s typec register partner fail(%d)\n",
+								__func__, ret);
+					}
+				}
+				kobject_uevent(&port->dev.kobj, KOBJ_CHANGE);
 			}
 		} else {
 			switch (info->sink_src_mode) {
@@ -1012,6 +1087,10 @@ static void process_interrupt_register(struct sgm7220_info *info)
 					break;
 			}
 			info->sink_src_mode = AUDIO_ACCESS_MODE;
+			if (info->typec_port_support) {
+				typec_unregister_partner(info->partner);
+				info->partner = NULL;
+			}
 		}
 	}
 	if (info->probe) {
@@ -1292,6 +1371,38 @@ int oplus_chg_inquire_cc_polarity(void)
 	return typec_dir;
 }
 
+static int typec_init(struct sgm7220_info *info)
+{
+	int ret = 0;
+
+	if (!info) {
+		pr_err("sgm7220_info is NULL\n");
+		return -1;
+	}
+
+	if (info->typec_port_support == false) {
+		pr_err("typec_port_support feature not supported\n");
+		return 0;
+	}
+
+	info->typec_caps.type = TYPEC_PORT_DRP;
+	info->typec_caps.data = TYPEC_PORT_DRD;
+	info->typec_caps.revision = 0x0120;
+	info->typec_caps.pd_revision = 0x0300;
+	info->typec_port = typec_register_port(info->dev, &info->typec_caps);
+
+	if (IS_ERR(info->typec_port)) {
+		ret = PTR_ERR(info->typec_port);
+		pr_err("%s typec register port fail(%d)\n",
+				   __func__, ret);
+		goto out;
+	}
+
+	info->partner_desc.identity = &info->partner_identity;
+out:
+	return ret;
+}
+
 //extern int oplus_sy697x_get_charger_type(void);
 static int sgm7220_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
@@ -1397,6 +1508,12 @@ static int sgm7220_probe(struct i2c_client *client, const struct i2c_device_id *
 	if (ret < 0) {
 		dev_err(&client->dev, "failed to enable wakeup src %d\n", ret);
 		goto err_enable_irq;
+	}
+	info->typec_port_support = of_property_read_bool(np, "typec_port_support");
+	if (info->typec_port_support) {
+		ret = typec_init(info);
+		if (ret < 0)
+			dev_err(&client->dev, "failed to typec_init %d\n", ret);
 	}
 	gchip = info;
 	sgm7220_set_typec_sinkonly();

@@ -25,6 +25,14 @@
 #define ohm_err_deferred(fmt, ...) \
         printk_deferred(KERN_ERR "[OHM_ERR][%s]"fmt, __func__, ##__VA_ARGS__)
 
+#if IS_ENABLED(CONFIG_CGROUP_SCHED)
+#define SA_CGROUP_SYS_BACKGROUND	(1)
+#define SA_CGROUP_FOREGROUND		(2)
+#define SA_CGROUP_BACKGROUND		(3)
+#define SA_CGROUP_TOP_APP			(4)
+#define SA_CGROUP_UX				(9)
+#endif
+
 #define OHM_FLASH_TYPE_EMC 1
 #define OHM_FLASH_TYPE_UFS 2
 
@@ -84,12 +92,17 @@ struct sched_stat_para {
         int low_thresh_ms;
         int high_thresh_ms;
         u64 delta_ms;
+	spinlock_t lock;
         struct sched_stat_common all;
         struct sched_stat_common fg;
         struct sched_stat_common ux;
+	struct sched_stat_common top;
+	struct sched_stat_common bg;
+	struct sched_stat_common sysbg;
 	atomic_t lwr_index;
 	struct long_wait_record last_n_lwr[LWR_SIZE];
 };
+extern struct sched_stat_para sched_para[OHM_SCHED_TOTAL];
 
 struct alloc_wait_para {
 	u64 total_alloc_wait_max_order;

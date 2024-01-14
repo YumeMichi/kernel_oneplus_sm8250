@@ -66,7 +66,8 @@
 #define REG02_SY6974B_OTG_CURRENT_LIMIT_MASK			BIT(7)
 #define REG02_SY6974B_OTG_CURRENT_LIMIT_500MA			0x00
 #define REG02_SY6974B_OTG_CURRENT_LIMIT_1200MA			BIT(7)
-
+#define REG02_SY6974B_BOOSTI_1200 1200
+#define REG02_SY6974B_BOOSTI_500  500
 #define REG02_SY6974B_FAST_CHG_CURRENT_LIMIT_MASK		(BIT(5) | BIT(4) | BIT(3) | BIT(2) | BIT(1) | BIT(0))
 #define REG02_SY6974B_FAST_CHG_CURRENT_LIMIT_SHIFT		0
 #define REG02_SY6974B_FAST_CHG_CURRENT_LIMIT_OFFSET		0
@@ -244,9 +245,44 @@
 #define SY6974B_FIRST_REG					0x00
 #define SY6974B_LAST_REG					0x0B
 #define SY6974B_REG_NUMBER					12
-
-
+#define FG_INTR_CHARGER_IN	8
+#define FG_INTR_CHARGER_OUT	4
+#ifdef CONFIG_OPLUS_CHARGER_MTK
+extern struct charger_consumer *charger_manager_get_by_name(
+		struct device *dev,	const char *name);
+extern struct oplus_chg_chip *g_oplus_chip;
+extern void Charger_Detect_Release(void);
+extern void Charger_Detect_Init(void);
+extern int get_rtc_spare_oplus_fg_value(void);
+extern int set_rtc_spare_oplus_fg_value(int value);
+extern void oplus_mt_usb_connect(void);
+extern void oplus_mt_usb_disconnect(void);
+extern bool oplus_get_otg_online_status(void);
+extern int oplus_battery_meter_get_battery_voltage(void);
+extern void oplus_mt6789_usbtemp_set_cc_open(void);
+extern void oplus_mt6789_usbtemp_set_typec_sinkonly(void);
+extern void oplus_chg_set_chargerid_switch_val(int value);
+extern int oplus_gauge_get_vbus_mvolts(void);
+extern void mt_set_chargerid_switch_val(int value);
+extern int mt_get_chargerid_switch_val(void);
+extern void set_charger_ic(int sel);
+extern int opchg_get_charger_type(void);
+extern bool oplus_chg_is_usb_present(void);
+extern void oplus_get_usbtemp_volt(struct oplus_chg_chip *chip);
+extern bool oplus_usbtemp_condition(void);
+extern void oplus_wake_up_usbtemp_thread(void);
+extern int get_vbus_voltage(int *val);
+extern bool oplus_pd_without_usb(void);
+extern int oplus_force_get_subboard_temp(void);
+extern bool is_usb_rdy(void);
+#else
+extern bool oplus_get_otg_online_status_default(void);
+extern bool oplus_pd_without_usb(void);
+extern bool oplus_pd_connected(void);
+extern void oplus_notify_device_mode(bool enable);
+#endif
 #define WPC_PRECHARGE_CURRENT					480
+#ifndef CONFIG_OPLUS_CHARGER_MTK
 extern int qpnp_get_battery_voltage(void);
 extern int opchg_get_charger_type(void);
 extern int opchg_get_real_charger_type(void);
@@ -276,4 +312,5 @@ extern int oplus_get_adapter_svid(void);
 extern void oplus_wake_up_usbtemp_thread(void);
 extern int qpnp_get_prop_charger_voltage_now(void);
 extern int qpnp_get_prop_ibus_now(void);
+#endif
 #endif

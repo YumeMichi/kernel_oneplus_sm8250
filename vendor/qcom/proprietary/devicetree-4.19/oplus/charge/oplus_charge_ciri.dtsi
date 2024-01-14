@@ -629,6 +629,8 @@
 			qcom,vbatt_pdqc_to_5v_thr = <4100>;
 			qcom,vbatt_pdqc_to_9v_thr = <4000>;
 
+			oplus,aging_ffc_version = <1>;
+
 			qcom,chargerid_switch-gpio = <&tlmm 4 0x00>;
 			qcom,ship-gpio = <&tlmm 133 0x00>;
 			//qcom,shortc-gpio = <&tlmm 43 0x00>;
@@ -679,6 +681,17 @@
 			pinctrl-8 = <&gpio1_adc_default>;
 			pinctrl-9 = <&input_pg_default>;
 			pinctrl-10 = <&charger_int_default>;
+};
+
+&soc {
+	oplus,track-charge {
+		compatible = "oplus,track-charge";
+		track,fast_chg_break_t_thd = <1000>;
+		track,general_chg_break_t_thd = <200>;
+		track,voocphy_type = <4>;
+		track,wired_max_power = <65000>;
+		track,wired_fast_chg_scheme = <1>;
+	};
 };
 
 &pm7250b_qg {

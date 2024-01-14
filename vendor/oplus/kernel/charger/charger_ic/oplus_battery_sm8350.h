@@ -72,6 +72,7 @@
 #define BC_PD_SOFT_RESET				0x58
 #define BC_CHG_STATUS_GET				0x59
 #define BC_CHG_STATUS_SET				0x60
+#define BC_ABNORMAL_PD_SVOOC_ADAPTER			0x67
 #endif
 
 #ifdef OPLUS_FEATURE_CHG_BASIC
@@ -90,6 +91,8 @@
 #define WLS_FW_WAIT_TIME_MS		500
 #define WLS_FW_BUF_SIZE			128
 #define DEFAULT_RESTRICT_FCC_UA		1000000
+
+#define BATTMNGR_EFAILED		512 /*Error: i2c Operation Failed*/
 
 #ifdef OPLUS_FEATURE_CHG_BASIC
 struct oem_read_buffer_req_msg {
@@ -178,6 +181,9 @@ enum battery_property_id {
 	BATT_UPDATE_SOC_SMOOTH_PARAM,
 	BATT_BATTERY_HMAC,
 	BATT_SET_BCC_CURRENT,
+	BATT_ZY0603_CHECK_RC_SFR,
+	BATT_ZY0603_SOFT_RESET,
+	BATT_AFI_UPDATE_DONE,
 	BATT_PROP_MAX,
 };
 
@@ -352,6 +358,7 @@ struct psy_state {
 struct oplus_custom_gpio_pinctrl {
 	int vchg_trig_gpio;
 	int ccdetect_gpio;
+	int mcu_en_gpio;
 	struct mutex pinctrl_mutex;
 	struct pinctrl *vchg_trig_pinctrl;
 	struct pinctrl_state *vchg_trig_default;
@@ -362,6 +369,9 @@ struct oplus_custom_gpio_pinctrl {
 	struct pinctrl_state	*usbtemp_l_gpio_default;
 	struct pinctrl			*usbtemp_r_gpio_pinctrl;
 	struct pinctrl_state	*usbtemp_r_gpio_default;
+	struct pinctrl			*mcu_en_pinctrl;
+	struct pinctrl_state *mcu_en_active;
+	struct pinctrl_state *mcu_en_sleep;
 };
 #endif
 
@@ -371,6 +381,7 @@ struct oplus_chg_iio {
 	struct iio_channel	*usbtemp_sup_v_chan;
 	struct iio_channel	*battcon_btb_chan;
 	struct iio_channel	*usbcon_btb_chan;
+	struct iio_channel	*subboard_temp_v_chan;
 };
 #endif
 
@@ -411,6 +422,8 @@ struct battery_chg_dev {
 	struct delayed_work	check_charger_type_work;
 	struct delayed_work	unsuspend_usb_work;
 	struct delayed_work	reset_turn_on_chg_work;
+	struct delayed_work	get_real_chg_type_work;
+	struct delayed_work	plugin_irq_work;
 	u32			oem_misc_ctl_data;
 	bool			oem_usb_online;
 	struct delayed_work	adsp_voocphy_err_work;
@@ -434,6 +447,7 @@ struct battery_chg_dev {
 #endif
 #ifdef OPLUS_FEATURE_CHG_BASIC
 	int vchg_trig_irq;
+	struct delayed_work mcu_en_init_work;
 	struct delayed_work vchg_trig_work;
 	struct delayed_work wait_wired_charge_on;
 	struct delayed_work wait_wired_charge_off;

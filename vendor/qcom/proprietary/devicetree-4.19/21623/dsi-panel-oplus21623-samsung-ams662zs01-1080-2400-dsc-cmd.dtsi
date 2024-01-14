@@ -1959,5 +1959,4 @@
 	oplus,bl_interpolate_remapping_nosub;
 	oplus,bl_interpolate_alpha_dc_nosub;
 	//oplus,dc_seed_support;
-	oplus,is-oplus-project;
 };

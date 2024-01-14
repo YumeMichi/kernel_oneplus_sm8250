@@ -116,26 +116,27 @@ struct vreg_config {
 };
 
 struct fpc1020_data {
-        struct device *dev;
-        struct platform_device *pldev;
-        int irq_gpio;
-        int rst_gpio;
-        int vdd_en_gpio;
-        int cs_gpio;
-        bool cs_gpio_set;
-        struct pinctrl *pinctrl;
-        struct pinctrl_state *pstate_cs_func;
-        struct input_dev *idev;
-        int irq_num;
-        struct mutex lock;
-        bool prepared;
-        int irq_enabled;
-        struct wakeup_source ttw_wl;
-        struct wakeup_source fpc_wl;
-        struct wakeup_source fpc_irq_wl;
-        //struct regulator                                *vreg[ARRAY_SIZE(vreg_conf)];
-        unsigned power_num;
-        fp_power_info_t pwr_list[FP_MAX_PWR_LIST_LEN];
+    struct device *dev;
+    struct platform_device *pldev;
+    int irq_gpio;
+    int rst_gpio;
+    int vdd_en_gpio;
+    int cs_gpio;
+    bool cs_gpio_set;
+    struct pinctrl *pinctrl;
+    struct pinctrl_state *pstate_cs_func;
+    struct input_dev *idev;
+    int irq_num;
+    struct mutex lock;
+    bool prepared;
+    int irq_enabled;
+    struct wakeup_source ttw_wl;
+    struct wakeup_source fpc_wl;
+    struct wakeup_source fpc_irq_wl;
+    /*struct regulator                                *vreg[ARRAY_SIZE(vreg_conf)];*/
+    unsigned power_num;
+    fp_power_info_t pwr_list[FP_MAX_PWR_LIST_LEN];
+    bool device_available;
 };
 
 static inline void fpc_wakeup_source_init(struct wakeup_source *ws,
@@ -272,6 +273,7 @@ int fpc_power_on(struct fpc1020_data* fpc_dev)
                     fpc_dev->pwr_list[index].pwr_type, index, rc);
             break;
         } else {
+            fpc_dev->device_available = 1;
             pr_info("---- power on ok with mode = %d, index = %d  ----\n",
                     fpc_dev->pwr_list[index].pwr_type, index);
         }
@@ -292,7 +294,7 @@ int fpc_power_off(struct fpc1020_data* fpc_dev)
         switch (fpc_dev->pwr_list[index].pwr_type) {
         case FP_POWER_MODE_LDO:
             rc = vreg_setup(fpc_dev, &(fpc_dev->pwr_list[index]), false);
-            pr_info("---- power on ldo ----\n");
+            pr_info("---- power off ldo ----\n");
             break;
         case FP_POWER_MODE_GPIO:
             gpio_set_value(fpc_dev->pwr_list[index].pwr_gpio, (fpc_dev->pwr_list[index].poweron_level == 0 ? 1: 0));
@@ -312,6 +314,7 @@ int fpc_power_off(struct fpc1020_data* fpc_dev)
                     fpc_dev->pwr_list[index].pwr_type, index, rc);
             break;
         } else {
+            fpc_dev->device_available = 0;
             pr_info("---- power off ok with mode = %d, index = %d  ----\n",
                     fpc_dev->pwr_list[index].pwr_type, index);
         }
@@ -437,15 +440,34 @@ static ssize_t regulator_enable_set(struct device *dev,
         int op = 0;
         bool enable = false;
         int rc = 0;
+        int fp_no_power_off = 0;
         struct  fpc1020_data *fpc1020 = dev_get_drvdata(dev);
+        struct device *pdev = fpc1020->dev;
+        struct device_node *np = pdev->of_node;
+        rc = of_property_read_u32(np, "fpc,fp_no_power_off", &fp_no_power_off);
+        if (rc) {
+            dev_err(pdev, "no need fp_no_power_off, ret = %d\n", rc);
+            fp_no_power_off = 0;
+        }
+
         if (1 == sscanf(buffer, "%d", &op)) {
                 if (op == 1) {
+                    if (1 == fpc1020->device_available && 0 == fp_no_power_off) {
+                        pr_info("Sensor is power on currently. \n");
+                    }
+                    else {
                         enable = true;
                         fpc_power_on(fpc1020);
+                    }
                 }
                 else if (op == 0) {
-                        enable = false;
-                        fpc_power_off(fpc1020);
+                        if (0 == fpc1020->device_available && 0 == fp_no_power_off) {
+                            pr_info("Sensor is power off currently. \n");
+                        }
+                        else {
+                            enable = false;
+                            fpc_power_off(fpc1020);
+                        }
                 }
         } else {
                 printk("invalid content: '%s', length = %zd\n", buffer, count);
@@ -754,6 +776,7 @@ static int fpc1020_irq_probe(struct platform_device *pldev)
         dev_info(fpc1020->dev, "-->%s\n", __func__);
         dev_set_drvdata(dev, fpc1020);
         fpc1020->pldev = pldev;
+        fpc1020->device_available = 0;
 
         if (!np) {
                 dev_err(dev, "no of node found\n");

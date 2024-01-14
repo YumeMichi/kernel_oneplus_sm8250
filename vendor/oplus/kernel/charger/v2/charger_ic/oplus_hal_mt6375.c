@@ -200,8 +200,10 @@ static void mt6375_vcoon_rvp_work(struct work_struct *work)
 	vbus_err = mt6375_vbus_is_error(chip);
 	vcoon_en = mt6375_vcoon_is_open(chip);
 	rc = mt6375_get_cc_status(chip, &cc1, &cc2);
-	if (rc < 0)
-		cc1 = cc2 = rc;
+	if (rc < 0) {
+		cc1 = rc;
+		cc2 = rc;
+	}
 
 	oplus_chg_ic_creat_err_msg(
 		chip->ic_dev, OPLUS_IC_ERR_PLAT_PMIC, PLAT_PMIC_ERR_VCONN_RVP,
@@ -220,8 +222,10 @@ static void mt6375_vcoon_ocp_work(struct work_struct *work)
 	vbus_err = mt6375_vbus_is_error(chip);
 	vcoon_en = mt6375_vcoon_is_open(chip);
 	rc = mt6375_get_cc_status(chip, &cc1, &cc2);
-	if (rc < 0)
-		cc1 = cc2 = rc;
+	if (rc < 0) {
+		cc1 = rc;
+		cc2 = rc;
+	}
 
 	oplus_chg_ic_creat_err_msg(
 		chip->ic_dev, OPLUS_IC_ERR_PLAT_PMIC, PLAT_PMIC_ERR_VCONN_OCP,
@@ -240,8 +244,10 @@ static void mt6375_vcoon_ovp_work(struct work_struct *work)
 	vbus_err = mt6375_vbus_is_error(chip);
 	vcoon_en = mt6375_vcoon_is_open(chip);
 	rc = mt6375_get_cc_status(chip, &cc1, &cc2);
-	if (rc < 0)
-		cc1 = cc2 = rc;
+	if (rc < 0) {
+		cc1 = rc;
+		cc2 = rc;
+	}
 
 	oplus_chg_ic_creat_err_msg(
 		chip->ic_dev, OPLUS_IC_ERR_PLAT_PMIC, PLAT_PMIC_ERR_VCONN_OVP,
@@ -260,8 +266,10 @@ static void mt6375_vcoon_uvp_work(struct work_struct *work)
 	vbus_err = mt6375_vbus_is_error(chip);
 	vcoon_en = mt6375_vcoon_is_open(chip);
 	rc = mt6375_get_cc_status(chip, &cc1, &cc2);
-	if (rc < 0)
-		cc1 = cc2 = rc;
+	if (rc < 0) {
+		cc1 = rc;
+		cc2 = rc;
+	}
 
 	oplus_chg_ic_creat_err_msg(
 		chip->ic_dev, OPLUS_IC_ERR_PLAT_PMIC, PLAT_PMIC_ERR_VCONN_UVP,
@@ -291,8 +299,10 @@ static void mt6375_vcoon_close_work(struct work_struct *work)
 		chip->vconn_en_time = -EINVAL;
 	}
 	rc = mt6375_get_cc_status(chip, &cc1, &cc2);
-	if (rc < 0)
-		cc1 = cc2 = rc;
+	if (rc < 0) {
+		cc1 = rc;
+		cc2 = rc;
+	}
 
 	oplus_chg_ic_creat_err_msg(chip->ic_dev, OPLUS_IC_ERR_PLAT_PMIC,
 				   PLAT_PMIC_ERR_VCONN_CLOSE,
@@ -334,8 +344,10 @@ static void mt6375_power_status_change_work(struct work_struct *work)
 
 	vcoon_en = mt6375_vcoon_is_open(chip);
 	rc = mt6375_get_cc_status(chip, &cc1, &cc2);
-	if (rc < 0)
-		cc1 = cc2 = rc;
+	if (rc < 0) {
+		cc1 = rc;
+		cc2 = rc;
+	}
 
 	oplus_chg_ic_creat_err_msg(
 		chip->ic_dev, OPLUS_IC_ERR_PLAT_PMIC,
@@ -451,7 +463,7 @@ static int mt6375_probe(struct platform_device *pdev)
 
 	rc = of_property_read_string(node, "oplus,tcpc_name", &tcpc_name);
 	if (rc < 0) {
-		chg_err("oplus,tcpc_name not found, rc=%d\n");
+		chg_err("oplus,tcpc_name not found, rc=%d\n", rc);
 		tcpc_name = "type_c_port0";
 	}
 	chip->tcpc = tcpc_dev_get_by_name(tcpc_name);
@@ -500,12 +512,13 @@ static int mt6375_probe(struct platform_device *pdev)
 	}
 	ic_cfg.name = node->name;
 	ic_cfg.index = ic_index;
-	sprintf(ic_cfg.manu_name, "MT6375");
-	sprintf(ic_cfg.fw_id, "0x00");
+	snprintf(ic_cfg.manu_name, OPLUS_CHG_IC_MANU_NAME_MAX - 1, "buck-MT6375");
+	snprintf(ic_cfg.fw_id, OPLUS_CHG_IC_FW_ID_MAX - 1, "0x00");
 	ic_cfg.type = ic_type;
 	ic_cfg.get_func = oplus_chg_get_func;
 	ic_cfg.virq_data = mt6375_virq_table;
 	ic_cfg.virq_num = ARRAY_SIZE(mt6375_virq_table);
+	ic_cfg.of_node = node;
 	chip->ic_dev = devm_oplus_chg_ic_register(chip->dev, &ic_cfg);
 	if (!chip->ic_dev) {
 		rc = -ENODEV;

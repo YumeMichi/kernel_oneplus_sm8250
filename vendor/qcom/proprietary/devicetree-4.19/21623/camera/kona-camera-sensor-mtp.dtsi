@@ -109,8 +109,8 @@
 			"cam_clk";
 		rgltr-cntrl-support;
 		pwm-switch;
-		rgltr-min-voltage = <1800000 2800000 2800000 1050000 0>;
-		rgltr-max-voltage = <1800000 2800000 2800000 1050000 0>;
+		rgltr-min-voltage = <1800000 2800000 2800000 1100000 0>;
+		rgltr-max-voltage = <1800000 2800000 2800000 1100000 0>;
 		rgltr-load-current = <0 80000 80000 105000 0>;
 		gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
@@ -174,7 +174,7 @@
 		clock-rates = <19200000>;
 	};
 
-    /*s5kgw1*/
+    /*ov64b*/
 	qcom,cam-sensor0 {
 		cell-index = <0>;
 		compatible = "qcom,cam-sensor";
@@ -194,8 +194,8 @@
 			"cam_clk";
 		rgltr-cntrl-support;
 		pwm-switch;
-		rgltr-min-voltage = <1800000 2800000 2800000 1050000 0>;
-		rgltr-max-voltage = <1800000 2800000 2800000 1050000 0>;
+		rgltr-min-voltage = <1800000 2800000 2800000 1100000 0>;
+		rgltr-max-voltage = <1800000 2800000 2800000 1100000 0>;
 		rgltr-load-current = <0 80000 80000 105000 0>;
 		gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
@@ -218,7 +218,7 @@
 		clock-cntl-level = "turbo";
 		clock-rates = <19200000>;
 	};
-    /*ov08d*/
+    /*hi846*/
 	qcom,cam-sensor1 {
 		cell-index = <1>;
 		compatible = "qcom,cam-sensor";
@@ -292,8 +292,8 @@
 			"cam_clk";
 		rgltr-cntrl-support;
 		pwm-switch;
-		rgltr-min-voltage = <1800000 2900000 1100000 0>;
-		rgltr-max-voltage = <1800000 2900000 1100000 0>;
+		rgltr-min-voltage = <1800000 2800000 1050000 0>;
+		rgltr-max-voltage = <1800000 2800000 1050000 0>;
 		rgltr-load-current = <0 80000 105000 0>;
 		gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";
@@ -415,8 +415,8 @@
 			"cam_clk";
 		rgltr-cntrl-support;
 		pwm-switch;
-		rgltr-min-voltage = <1800000 2900000 1100000 0>;
-		rgltr-max-voltage = <1800000 2900000 1100000 0>;
+		rgltr-min-voltage = <1800000 2800000 1050000 0>;
+		rgltr-max-voltage = <1800000 2800000 1050000 0>;
 		rgltr-load-current = <0 80000 105000 0>;
 		gpio-no-mux = <0>;
 		pinctrl-names = "cam_default", "cam_suspend";

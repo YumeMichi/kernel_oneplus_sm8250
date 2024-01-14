@@ -166,6 +166,7 @@ struct fp_dev_touch_info {
 //#define PROC_DIR		"fp"      /* if defined, create node under /proc/fp/xxx */
 
 //#ifdef ODM_HQ_EDIT
+//lishuyan@ODM_HQ.BSP.FINGEPRINT 2020/06/04
 //no create /proc/fp_id
 //#define PROC_NODE		"fp_id"   /* proc node name */
 //#endif

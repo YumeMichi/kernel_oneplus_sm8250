@@ -7,6 +7,7 @@
 #define __LINUX_ION_H__
 
 extern atomic_long_t ion_total_size;
+extern atomic_long_t boost_pool_pages;
 extern bool ion_cnt_enable;
 extern unsigned long ion_total(void);
 

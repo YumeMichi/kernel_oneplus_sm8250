@@ -61,12 +61,12 @@ enum APOLLO_BL_ID : int {
 };
 
 struct oplus_apollo_backlight_list {
-	bool bl_fix; //for 4096/8192 fix
-	int bl_id_lens;    //1 for 4096, 2 for 8192;
+	bool bl_fix; /*for 4096/8192 fix*/
+	int bl_id_lens;    /*1 for 4096, 2 for 8192;*/
 	int bl_level_last;
 	int bl_index_last;
 	int buf_size;
-	void *vaddr; //dmabuf virtual address
+	void *vaddr; /*dmabuf virtual address*/
 	unsigned short *apollo_bl_list;
 	unsigned short *panel_bl_list;
 	struct dma_buf *dmabuf;
@@ -74,8 +74,8 @@ struct oplus_apollo_backlight_list {
 
 struct apollo_backlight_map_value
 {
-	int index; //backlight index
-	int bl_level; //the value of the index
+	int index; /*backlight index*/
+	int bl_level; /*the value of the index*/
 	int apollo_bl_level;
 };
 struct panel_ioctl_desc {
@@ -141,7 +141,10 @@ struct softiris_color
 #define PANEL_IOCTL_SET_LCM_CABC              PANEL_IOW(0x2C, unsigned int)
 #define PANEL_IOCTL_GET_LCM_CABC              PANEL_IOWR(0x2D, unsigned int)
 #define PANEL_IOCTL_SET_AOD_AREA              PANEL_IOW(0x2E, struct panel_aod_area_para)
-
+/* Apollo DC backlight */
+#define PANEL_IOCTL_SET_DC_REAL_BACKLIGHT     PANEL_IOWR(0x37, unsigned int)
+#define PANEL_IOCTL_GET_PANEL_BPP                PANEL_IOWR(0x3B, unsigned int)
+#define PANEL_IOCTL_GET_PANEL_NAME               PANEL_IOWR(0x3C, struct panel_name)
 #define PANEL_IOCTL_SET_APOLLO_BACKLIGHT      PANEL_IOW(0x51, struct apollo_backlight_map_value)
 #define PANEL_IOCTL_GET_SOFTIRIS_COLOR        PANEL_IOWR(0x53, struct softiris_color)
 #define PANEL_IOCTL_SET_DITHER_STATUS        PANEL_IOWR(0x54, unsigned int)

@@ -26,6 +26,11 @@ enum oplus_mms_type {
 	OPLUS_MMS_TYPE_VOOC,
 	OPLUS_MMS_TYPE_AIRVOOC,
 	OPLUS_MMS_TYPE_COMM,
+	OPLUS_MMS_TYPE_PARALLEL,
+	OPLUS_MMS_TYPE_DUAL_CHAN,
+	OPLUS_MMS_TYPE_CPA,
+	OPLUS_MMS_TYPE_UFCS,
+	OPLUS_MMS_TYPE_PPS,
 };
 
 enum mms_msg_type {
@@ -62,6 +67,7 @@ struct mms_item {
 	struct mms_item_desc desc;
 	bool updated;
 	rwlock_t lock;
+	struct mutex update_lock;
 	union mms_msg_data data;
 	union mms_msg_data pre_data;
 };

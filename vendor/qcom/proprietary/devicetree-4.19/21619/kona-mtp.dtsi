@@ -167,6 +167,7 @@
 		chipset-21619 = "SN100T";
 		chipset-2169A = "SN100T";
 		chipset-2169B = "SN100T";
+		chipset-2161A = "SN100T";
 	};
 	//#endif /* OPLUS_FEATURE_CONNFCSOFT */
 
@@ -2011,6 +2012,7 @@ board_temp-usr {
 			qcom,vbatt_num = <2>;
 			qcom,ffc_support;
 			qcom,dual_ffc;
+			qcom,nightstandby_support;
 			recharge_after_full;
 
 			qcom,normal_vterm_hw_inc = <18>;
@@ -2065,6 +2067,7 @@ board_temp-usr {
 
 			//for PD9V or QC9V
 			qcom,vbatt_pdqc_to_5v_thr = <4100>;
+			oplus,pdqc_9v_voltage_adaptive;
 
 			qcom,vooc_show_ui_soc_decimal;
 			qcom,ui_soc_decimal_speedmin = <20>;//2A

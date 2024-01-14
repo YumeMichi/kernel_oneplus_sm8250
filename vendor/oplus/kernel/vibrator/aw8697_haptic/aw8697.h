@@ -592,11 +592,15 @@ struct aw8697_que_seq {
 #define OS12_NEW_RING_END       89
 #define OPLUS_RING_START       161
 #define OPLUS_RING_END         167
+#define OS14_NEW_RING_START	371
+#define OS14_NEW_RING_END	410
 
 #define OPLUS_START_INDEX       201
 #define OPLUS_END_INDEX         326
 #define OPLUS_RING_START_INDEX  152
 #define OPLUS_RING_END_INDEX    231
+#define OS14_NEW_RING_START	371
+#define OS14_NEW_RING_END	410
 
 #define AW8697_WAVEFORM_INDEX_CS_PRESS             16
 #ifdef CONFIG_OPLUS_HAPTIC_OOS

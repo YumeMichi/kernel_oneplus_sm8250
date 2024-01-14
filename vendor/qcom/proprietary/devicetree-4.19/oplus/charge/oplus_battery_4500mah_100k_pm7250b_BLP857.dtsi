@@ -1,12 +1,12 @@
-qcom,5074218_oplus_AA936_4500mAH {
-    /* 5074218_oplus_AA936_4500mAH_averaged_MasterSlave_Mar5th2021 */
+qcom,5074218_Realme_AA936_4500mAH {
+    /* 5074218_Realme_AA936_4500mAH_averaged_MasterSlave_Mar5th2021 */
     qcom,max-voltage-uv = <4430000>;
     qcom,fg-cc-cv-threshold-uv = <4430000>;
     qcom,fastchg-current-ma = <2200>;
     qcom,batt-id-kohm = <100>;
     qcom,battery-beta = <3435>;
     qcom,battery-therm-kohm = <15>;
-    qcom,battery-type = "5074218_oplus_AA936_4500mAH_averaged_MasterSlave_Mar5th2021";
+    qcom,battery-type = "5074218_Realme_AA936_4500mAH_averaged_MasterSlave_Mar5th2021";
     qcom,qg-batt-profile-ver = <100>;
 
 	qcom,fcc1-temp-lut {

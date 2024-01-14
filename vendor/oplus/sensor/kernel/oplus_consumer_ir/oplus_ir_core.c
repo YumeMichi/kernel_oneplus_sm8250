@@ -19,10 +19,14 @@
 #define IR_HIGHT_HW_DATA_INDEX           2
 #define BITS_PER_BYTE                    8
 #define IR_DEFAULT_VDD_TYPE              0
+#define IR_DEFAULT_VDD_CHANGE_ENABLE     0
 #define IR_EXTERNAL_VDD_TYPE             1
+#define IR_FIRST_POWER_ON                1
 #define IR_PARAM_MAX_SIZE                256*1024
+#define MIN_FREQUENCY 20000
+#define MAX_FREQUENCY 60000
 
-#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#if defined (OPLUS_FEATURE_CAMERA_COMMON) || defined (CONFIG_REGULATOR_OPLUS_WL2868C)
 typedef enum {
 		EXT_NONE = -1,
 		EXT_LDO1,
@@ -44,6 +48,7 @@ struct hw_core_config_t {
 	int vdd_type;
 	int vdd_min_vol;
 	int vdd_max_vol;
+	int vdd_change_enable;
 	struct regulator *vdd_3v0;
 };
 
@@ -56,6 +61,7 @@ struct ir_core {
 	void *priv;
 	char *name;
 	struct mutex tx_mutex;
+	int first_power_on;
 };
 
 struct ir_convert_data_t {
@@ -111,6 +117,13 @@ static int parse_hw_core_config(struct device *dev, struct ir_core* ir_core)
 			ir_core->core_config.vdd_type = value;
 		}
 
+		retval = of_property_read_u32(np, "vdd-change-enable", &value);
+		if (retval < 0) {
+			ir_core->core_config.vdd_change_enable = IR_DEFAULT_VDD_CHANGE_ENABLE;
+		} else {
+			ir_core->core_config.vdd_change_enable = value;
+		}
+
 		if (ir_core->core_config.vdd_type == IR_EXTERNAL_VDD_TYPE) {
 			ir_core->core_config.vdd_3v0 = NULL;
 			pr_info("oplus_ir_core: %s: ir_core->core_config.vdd_3v0 is NULL\n", __func__);
@@ -125,6 +138,8 @@ static int parse_hw_core_config(struct device *dev, struct ir_core* ir_core)
 			}
 		}
 
+		pr_info("oplus_ir_core: ir_core->first_power_on is %d\n", ir_core->first_power_on);
+		pr_info("oplus_ir_core: %s: vdd-change-enable is %u\n", __func__, ir_core->core_config.vdd_change_enable);
 		pr_info("oplus_ir_core: %s: vdd-type is %u\n", __func__, ir_core->core_config.vdd_type);
 		pr_info("oplus_ir_core: %s: vdd-min-vol is %u\n", __func__, ir_core->core_config.vdd_max_vol);
 		pr_info("oplus_ir_core: %s: vdd-max-vol is %u\n", __func__, ir_core->core_config.vdd_min_vol);
@@ -138,15 +153,24 @@ static void enable_ir_vdd(struct ir_core *ir_core)
 	int retval = 0;
 
 	if (ir_core->core_config.vdd_3v0 != NULL) {
+		if (ir_core->core_config.vdd_change_enable == 1) {
+			if (ir_core->first_power_on == IR_FIRST_POWER_ON) {
+				regulator_set_load(ir_core->core_config.vdd_3v0, 0);
+				regulator_set_voltage(ir_core->core_config.vdd_3v0, 0,
+						ir_core->core_config.vdd_max_vol);
+			}
+		}
+
 		regulator_set_voltage(ir_core->core_config.vdd_3v0,
-			ir_core->core_config.vdd_min_vol, ir_core->core_config.vdd_max_vol);
+				ir_core->core_config.vdd_min_vol, ir_core->core_config.vdd_max_vol);
 		retval = regulator_enable(ir_core->core_config.vdd_3v0);
 		if (retval) {
 			pr_err("oplus_ir_core: file_write vdd_3v0 enable fail\n");
 		}
+		ir_core->first_power_on = 0;
 	}
 
-#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#if defined (OPLUS_FEATURE_CAMERA_COMMON) || defined (CONFIG_REGULATOR_OPLUS_WL2868C)
 	if ((true == wl2868c_check_ldo_status()) && (ir_core->core_config.vdd_type == IR_EXTERNAL_VDD_TYPE)) {
 		wl2868c_ldo_enable(EXT_LDO5, ir_core->core_config.vdd_max_vol);
 		pr_info("oplus_ir_core:wl2868c config value %d \n", ir_core->core_config.vdd_max_vol);
@@ -160,9 +184,15 @@ static void disable_ir_vdd(struct ir_core *ir_core)
 {
 	if (ir_core->core_config.vdd_3v0 != NULL) {
 		regulator_disable(ir_core->core_config.vdd_3v0);
+
+		if (ir_core->core_config.vdd_change_enable == 1) {
+				regulator_set_load(ir_core->core_config.vdd_3v0, 0);
+				regulator_set_voltage(ir_core->core_config.vdd_3v0, 0,
+						ir_core->core_config.vdd_max_vol);
+		}
 	}
 
-#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#if defined (OPLUS_FEATURE_CAMERA_COMMON) || defined (CONFIG_REGULATOR_OPLUS_WL2868C)
 	if ((true == wl2868c_check_ldo_status()) && (ir_core->core_config.vdd_type == IR_EXTERNAL_VDD_TYPE)) {
 		pr_info("oplus_ir_core:wl2868c disable seq type EXT_LDO5");
 		wl2868c_ldo_disable(EXT_LDO5, 0);
@@ -420,6 +450,20 @@ static long ir_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long
 			enable_ir_vdd(ir);
 		}
 
+		if (params->carrier_freq > MAX_FREQUENCY || params->carrier_freq < MIN_FREQUENCY) {
+			vfree(params);
+			pr_err("oplus_ir_core: not support freq!\n");
+			mutex_unlock(&ir->tx_mutex);
+			return -EFAULT;
+		}
+
+		if (params->size > IR_PARAM_MAX_SIZE) {
+			vfree(params);
+			pr_err("oplus_ir_core: params->size too large!\n");
+			mutex_unlock(&ir->tx_mutex);
+			return -ENOMEM;
+		}
+
 		ret = ir->ops->send(ir->priv, params, ir->inf);
 		if (ret < 0) {
 			pr_err("oplus_ir_core: Failed to send pattern\n");
@@ -505,6 +549,7 @@ static int ir_core_probe(struct platform_device *pdev)
 
 	g_ir = ir;
 	mutex_init(&g_ir->tx_mutex);
+	ir->first_power_on = 1;
 	if (parse_hw_core_config(&pdev->dev, g_ir) < 0) {
 		pr_err("Failed to get dts!");
 		return -ENOMEM;

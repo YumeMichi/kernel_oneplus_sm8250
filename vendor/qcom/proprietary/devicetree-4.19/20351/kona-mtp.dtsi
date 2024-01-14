@@ -721,6 +721,8 @@
 		/* SW Support Feature Control */
 		health_monitor_v2_support;
 		black_gesture_support;
+		black_gesture_indep_support;
+		sportify_aod_gesture_support;
 		charger_pump_support;
 		fw_update_app_support;
 		smart_gesture_support;
@@ -2173,6 +2175,8 @@
 			qcom,default_little_cool_vfloat_sw_limit = <4385>;
 			qcom,default_temp_little_cool_vfloat_mv = <4435>;
 			qcom,default_little_cool_vfloat_over_sw_limit = <4445>;
+
+			oplus,aging_ffc_version = <1>;
 
 			///qcom,offset_temp = <30>;
 			//for control:

@@ -62,7 +62,6 @@
 #define FingerprintUp       15
 #define SingleTap           16
 #define Heart               17
-#define SGESTRUE            18  /* S new prj have not this type*/
 #define PENDETECT           18
 #define HEALTH_REPORT_GRIP          "grip_report"
 #define HEALTH_REPORT_BASELINE_ERR  "baseline_err"
@@ -266,11 +265,6 @@ typedef enum lcd_power {
 	LCD_POWER_OFF,
 	LCD_POWER_ON,
 } lcd_power_status;
-
-typedef enum fp_status {
-	FP_STATUS_OFF,
-	FP_STATUS_ON,
-} fp_status;
 
 typedef enum {
 	OEM_VERIFIED_BOOT_STATE_UNLOCKED,
@@ -844,8 +838,7 @@ struct touchpanel_data {
 	bool fw_update_in_probe_with_headfile;
 	bool lcd_tp_refresh_support;                       /*lcd nofity tp refresh fps switch*/
 	bool optimized_show_support;                       /*support to show total optimized time*/
-	bool calibration_support;                       /*multiple panel consistency if contains samsung ic to calivation*/
-	bool sportify_aod_gesture_support;
+	bool auto_test_need_cal_support;                       /*multiple panel consistency if contains samsung ic to calivation*/
 	bool hall_status;                                    /*control state of hall status*/
 	bool load_fw_failed;
 	bool snr_read_support;                              /*feature to support reading snr data*/
@@ -865,7 +858,6 @@ struct touchpanel_data {
 
 	uint32_t irq_flags_cover;                           /*cover irq setting flag*/
 
-	int irq_need_dev_resume_time;                       /*control setting of wait resume time*/
 	int gesture_enable;                                 /*control state of black gesture*/
 #if GESTURE_RATE_MODE
 	int geature_ignore;
@@ -981,7 +973,6 @@ struct touchpanel_data {
 	int rate_ctrl_level;
 	int curved_size;                                    /*curved size of panel for OS sidebar setting*/
 	u32 smooth_level;
-	int oplus_smooth_level;
 	bool smooth_level_support;
 	bool smooth_level_array_support;
 	bool smooth_level_charging_array_support;
@@ -994,8 +985,6 @@ struct touchpanel_data {
 	u32 sensitive_level_charging_array[SENSITIVE_LEVEL_NUM];
 	u32 smooth_level_chosen;
 	u32 sensitive_level_chosen;
-	u32 smooth_level_default;
-	u32 sensitive_level_default;
 
 	int stop_filter_set;
 	int msecs_to_jiffies_time;
@@ -1040,10 +1029,9 @@ struct oplus_touchpanel_operations {
 	fw_update_state (*fw_update)(void *chip_data, const struct firmware *fw, bool force);      /*return 0 normal; return -1:update failed;*/
 	int (*power_control)(void *chip_data, bool enable);                                       /*return 0:success;other:abnormal, need to jump out*/
 	int (*reset_gpio_control)(void *chip_data, bool enable);                                  /*used for reset gpio*/
-	int (*cs_gpio_control)(void *chip_data, bool enable);                                 /*used for cs gpio*/
-	u8(*trigger_reason)(void *chip_data, int gesture_enable, int is_suspended);               /*clear innterrupt reg && detect irq trigger reason*/
-	u32(*u32_trigger_reason)(void *chip_data, int gesture_enable, int is_suspended);
-	u8(*get_keycode)(void *chip_data);                                                        /*get touch-key code*/
+	u8 (*trigger_reason)(void *chip_data, int gesture_enable, int is_suspended);               /*clear innterrupt reg && detect irq trigger reason*/
+	u32 (*u32_trigger_reason)(void *chip_data, int gesture_enable, int is_suspended);
+	u8 (*get_keycode)(void *chip_data);                                                        /*get touch-key code*/
 	int (*esd_handle)(void *chip_data);
 	int (*fw_handle)(void *chip_data);                                                        /*return 0 normal; return -1:update failed;*/
 	void (*resume_prepare)(void *chip_data);                                           /*using for operation before resume flow,

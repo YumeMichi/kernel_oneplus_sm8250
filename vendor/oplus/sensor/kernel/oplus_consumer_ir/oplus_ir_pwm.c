@@ -161,7 +161,7 @@ int ir_pwm_file_write(void *priv, struct pattern_params *param, enum ir_interfac
 		total_time += param->pattern[i];
 	}
 
-	pr_info("oplus_pwm_ir: transmit for %d uS at %d Hz", total_time, carrier_freq);
+	pr_info("oplus_pwm_ir: transmit for %u uS at %d Hz", total_time, carrier_freq);
 
 	hw_frequency = carrier_freq * IR_DEFAULT_DUTY_CYCLE;
 	hd_uration = ((IR_PWM_SRC_CLOCK_BASE * 10) / hw_frequency + 5) / 10;
@@ -177,12 +177,8 @@ int ir_pwm_file_write(void *priv, struct pattern_params *param, enum ir_interfac
 	hw_data_num = (hw_data_total_num / BITS_PER_BYTE);
 	pwm_buf0_size = hw_data_num;
 
-	/*for ir debug*/
-	/*for (i = 0; i < param->size; i ++) {
-		pr_info("oplus_pwm_ir:ir_pwm_file_write pattern[%d] = %d\n", i, param->pattern[i]);
-	}*/
-	pr_info("oplus_pwm_ir: hwDataNum=%d, pwm_buf0_size=%d, hw_data_total_num=%d\n", hw_data_num, pwm_buf0_size, hw_data_total_num);
-	pr_info("oplus_pwm_ir: pwm hd_uration = %d, hw_wave_len = %lld, hw_frequency = %d", hd_uration, hw_wave_len, hw_frequency);
+	pr_info("oplus_pwm_ir: hw_data_num=%u, pwm_buf0_size=%u, hw_data_total_num=%u\n", hw_data_num, pwm_buf0_size, hw_data_total_num);
+	pr_info("oplus_pwm_ir: pwm hd_uration = %u, hw_wave_len = %llu, hw_frequency = %u", hd_uration, hw_wave_len, hw_frequency);
 
 	pwm_ir->virt = dma_alloc_coherent(pwm_ir->dev, (hw_data_num + IR_TRAIL_0_VALUE_SIZE), &pwm_ir->wave_phy, GFP_KERNEL);
 	if (pwm_ir->virt == NULL) {
@@ -209,15 +205,6 @@ int ir_pwm_file_write(void *priv, struct pattern_params *param, enum ir_interfac
 
 	usleep_range(total_time , total_time + 10);
 	oplus_ir_pwm_stop(pwm_ir);
-
-	/*for ir debug*/
-	/*if (hw_data_num != 0) {
-		pr_info("oplus_ir_pwm_file_write data count is = %d\n", hw_data_num);
-		for(i = 0; i < hw_data_num; i ++) {
-			pr_info("oplus_ir_pwm_file_write data[%d] = %d\n", i, pwm_ir->tx_buf[i]);
-		}
-	}*/
-
 
 	if(ret != 0) {
 		pr_info("oplus_pwm_ir:set pwm config failed\n");

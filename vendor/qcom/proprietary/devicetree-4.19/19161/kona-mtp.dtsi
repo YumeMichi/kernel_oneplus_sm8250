@@ -218,6 +218,9 @@
 		oplus,override1_en_value = <0x1>;
 	};
 	//#endif //OPLUS_ARCH_EXTENDS
+	sensor_fb {
+		compatible = "oplus,sensor-feedback";
+	};
 	//#ifdef OPLUS_FEATURE_SENSOR_SMEM
 	/*enum sensor_id { ACCEL,GYRO,MAG,LIGHT,PROXIMITY,SAR,CT,BAROMETER,SENSORS_NUM};*/
 	oplus_sensor {
@@ -527,7 +530,7 @@
 
                 platform_support_project_dir = <19161 19161>;
 
-                platform_support_project_commandline = "mdss_dsi_oppo19161samsung_amb655uv01_1080_2400_cmd","mdss_dsi_oppo19161samsung_amb655uv01_1080_2400_cmd";
+                platform_support_project_commandline = "mdss_dsi_oplus19161samsung_amb655uv01_1080_2400_cmd","mdss_dsi_oplus19161samsung_amb655uv01_1080_2400_cmd";
 
 		touchpanel,elimination-range = <20 200 200>;
 		prevention,no_handle_para = <0 0 0>;
@@ -549,6 +552,8 @@
 		//ear_sense_support;
 		health_monitor_v2_support;
 		black_gesture_support;
+		black_gesture_indep_support;
+		sportify_aod_gesture_support;
 		//fw_edge_limit_support;
 		charger_pump_support;
 		wireless_charger_support;
@@ -1732,6 +1737,8 @@
 			qcom,usbtemp_batttemp_gap = <18>;
 
 			qcom,skip_usbtemp_cool_down;
+
+			oplus,aging_ffc_version = <1>;
 
 			//for oplus chg framework:
 			qcom,input_current_charger_ma = <2000>;

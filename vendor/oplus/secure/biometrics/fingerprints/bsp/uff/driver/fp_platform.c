@@ -14,6 +14,7 @@
 #include <linux/spi/spidev.h>
 #include <linux/timer.h>
 #include <linux/workqueue.h>
+#include <linux/mutex.h>
 #include "fp_driver.h"
 
 #if defined(CONFIG_FP_SUPPLY_MODE_LDO)
@@ -29,12 +30,15 @@ static int fingerprint_ldo_disable(unsigned int ldo_num, unsigned int mv)
 }
 #endif
 
+static DEFINE_MUTEX(g_power_lock);
+
 static int vreg_setup(struct fp_dev *fp_dev, fp_power_info_t *pwr_info, bool enable) {
     int               rc;
     struct regulator *vreg;
     struct device *   dev  = &fp_dev->pdev->dev;
     const char *      name = NULL;
 
+    mutex_lock(&g_power_lock);
     if (NULL == pwr_info || NULL == pwr_info->vreg_config.name) {
         pr_err("pwr_info is NULL\n");
         rc = -EINVAL;
@@ -92,6 +96,7 @@ static int vreg_setup(struct fp_dev *fp_dev, fp_power_info_t *pwr_info, bool ena
         rc = 0;
     }
 fp_out:
+    mutex_unlock(&g_power_lock);
     return rc;
 }
 
@@ -332,6 +337,7 @@ exit:
 
 int fp_parse_dts(struct fp_dev *fp_dev) {
     int                 rc  = 0;
+    int                 rc_intr3  = -1;
     struct device *     dev = &fp_dev->pdev->dev;
     struct device_node *np  = dev->of_node;
 
@@ -359,7 +365,36 @@ int fp_parse_dts(struct fp_dev *fp_dev) {
         dev_err(dev, "Can't find fp_spi_driver pinctrl state\n");
         return PTR_ERR(fp_dev->pstate_spi);
     }
+
+    fp_dev->pstate_cs_func  = pinctrl_lookup_state(fp_dev->pinctrl, "fp_cs_func");
+    if (IS_ERR(fp_dev->pstate_cs_func)) {
+        dev_err(dev, "Can't find fp_cs_func pinctrl state\n");
+    } else {
+        pr_info("find fp_cs_func ok.\n");
+    }
+
+    fp_dev->pstate_cs_pull_down  = pinctrl_lookup_state(fp_dev->pinctrl, "gpio_cs_pull_down");
+    if (IS_ERR(fp_dev->pstate_cs_pull_down)) {
+        dev_err(dev, "Can't find gpio_cs_pull_down pinctrl state\n");
+    } else {
+        pr_info("find gpio_cs_pull_down ok.\n");
+    }
 #endif
+
+    fp_dev->gpio_intr3_available = false;
+    fp_dev->gpio_intr3 = of_get_named_gpio(np, "uff,gpio_intr3", 0);
+    if (fp_dev->gpio_intr3 < 0) {
+        pr_err("falied to get intr3 gpio!\n");
+    } else {
+        rc_intr3 = devm_gpio_request(dev, fp_dev->gpio_intr3, "gpio_intr3");
+        if (rc_intr3) {
+            pr_err("failed to request intr3 gpio, rc = %d\n", rc);
+            goto err_intr3;
+        } else {
+            fp_dev->gpio_intr3_available = true;
+            gpio_direction_output(fp_dev->gpio_intr3, 0);
+        }
+    }
 
     fp_dev->reset_gpio = of_get_named_gpio(np, "uff,gpio_reset", 0);
     if (fp_dev->reset_gpio < 0) {
@@ -403,8 +438,14 @@ int fp_parse_dts(struct fp_dev *fp_dev) {
 err_pwr:
     fp_cleanup_pwr_list(fp_dev);
 err_irq:
-    devm_gpio_free(dev, fp_dev->reset_gpio);
+    fp_dev->gpiod_reset = gpio_to_desc(fp_dev->reset_gpio);
+    devm_gpiod_put(dev, fp_dev->gpiod_reset);
 err_reset:
+    if (0 == rc_intr3) {
+        fp_dev->gpiod_intr3 = gpio_to_desc(fp_dev->gpio_intr3);
+        devm_gpiod_put(dev, fp_dev->gpiod_reset);
+    }
+err_intr3:
     return rc;
 }
 
@@ -531,15 +572,30 @@ int fp_hw_reset(struct fp_dev *fp_dev, unsigned int delay_ms) {
     mdelay(delay_ms);
     return 0;
 }
+
+int fp_reset_gpio_ctl(struct fp_dev *fp_dev, uint32_t value)
+{
+    if (fp_dev == NULL) {
+        pr_info("Input buff is NULL.\n");
+        return -1;
+    }
+    // gpio_direction_output(fp_dev->reset_gpio, 1);
+    gpio_set_value(fp_dev->reset_gpio, value);
+    return 0;
+}
+
 int fp_power_reset(struct fp_dev *fp_dev) {
     if (fp_dev == NULL) {
         pr_info("Input buff is NULL.\n");
         return -1;
     }
     gpio_set_value(fp_dev->reset_gpio, 0);
+    fp_cs_ctl(fp_dev, 0);
     fp_power_off(fp_dev);
     mdelay(50);
     fp_power_on(fp_dev);
+    fp_cs_ctl(fp_dev, 1);
+    mdelay(10);
     gpio_set_value(fp_dev->reset_gpio, 1);
     mdelay(3);
     return 0;
@@ -551,4 +607,48 @@ int fp_irq_num(struct fp_dev *fp_dev) {
     } else {
         return gpio_to_irq(fp_dev->irq_gpio);
     }
+}
+
+int fp_enable_intr3(struct fp_dev *fp_dev)
+{
+    if (fp_dev->gpio_intr3_available) {
+        pr_info("%s fp_enable_intr3. \n", __func__);
+        gpio_set_value(fp_dev->gpio_intr3, 1);
+    }
+    return 0;
+}
+
+int fp_disable_intr3(struct fp_dev *fp_dev)
+{
+    if (fp_dev->gpio_intr3_available) {
+        pr_info("%s fp_disable_intr3. \n", __func__);
+        gpio_set_value(fp_dev->gpio_intr3, 0);
+    }
+    return 0;
+}
+
+int fp_cs_ctl(struct fp_dev *fp_dev, uint32_t value)
+{
+#if defined(MTK_PLATFORM)
+    int ret = 0;
+    if (fp_dev == NULL) {
+        pr_info("Input buff is NULL.\n");
+        return -1;
+    }
+
+    if (IS_ERR(fp_dev->pstate_cs_func) == 0 && IS_ERR(fp_dev->pstate_cs_pull_down) == 0) {
+        if (value) {
+            ret = pinctrl_select_state(fp_dev->pinctrl, fp_dev->pstate_cs_func);
+        } else {
+            ret = pinctrl_select_state(fp_dev->pinctrl, fp_dev->pstate_cs_pull_down);
+        }
+        if (ret) {
+            pr_err("falied to select pinctrl fp_cs_ctl, ret = %d!\n", ret);
+            return ret;
+        } else {
+            pr_info("select cs pstate value = %d.\n", value);
+        }
+    }
+#endif
+    return 0;
 }

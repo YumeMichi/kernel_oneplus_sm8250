@@ -86,6 +86,7 @@
 #define BC_ADSP_NOTIFY_AP_CP_MOS_DISABLE                         0x0064
 #define BC_PPS_OPLUS                    0x65
 #define BC_ADSP_NOTIFY_TRACK				0x66
+#define BC_ABNORMAL_PD_SVOOC_ADAPTER 0x67
 #endif
 
 #ifdef OPLUS_FEATURE_CHG_BASIC
@@ -260,11 +261,15 @@ enum usb_property_id {
 	USB_PPS_GET_DISCONNECT_STATUS,
 	USB_PPS_VOOCPHY_ENABLE,
 	USB_IN_STATUS,
+	USB_GET_BATT_CURR,
 	/*USB_ADSP_TRACK_DEBUG,*/
 #endif /*OPLUS_FEATURE_CHG_BASIC*/
 	USB_TEMP,
 	USB_REAL_TYPE,
 	USB_TYPEC_COMPLIANT,
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	USB_PPS_FORCE_SVOOC,
+#endif /*OPLUS_FEATURE_CHG_BASIC*/
 	USB_PROP_MAX,
 };
 
@@ -406,7 +411,9 @@ struct oplus_custom_gpio_pinctrl {
 	int tx_boost_en_gpio;
 	int tx_ovp_en_gpio;
 	int wrx_ovp_off_gpio;
+	int mcu_en_gpio;
 	struct mutex pinctrl_mutex;
+	struct mutex switch1_pinctrl_mutex;
 	struct pinctrl *vchg_trig_pinctrl;
 	struct pinctrl_state *vchg_trig_default;
 	struct pinctrl		*ccdetect_pinctrl;
@@ -433,6 +440,9 @@ struct oplus_custom_gpio_pinctrl {
 	struct pinctrl		*wrx_ovp_off_pinctrl;
 	struct pinctrl_state	*wrx_ovp_off_active;
 	struct pinctrl_state	*wrx_ovp_off_sleep;
+	struct pinctrl		*mcu_en_pinctrl;
+	struct pinctrl_state *mcu_en_active;
+	struct pinctrl_state *mcu_en_sleep;
 };
 #endif
 
@@ -492,6 +502,7 @@ struct battery_chg_dev {
 	struct delayed_work ctrl_lcm_frequency;
 /*#endif*/
 	struct delayed_work	oem_lcm_en_check_work;
+	struct delayed_work	apsd_force_svooc_work;
 	u32			oem_misc_ctl_data;
 	bool			oem_usb_online;
 	struct delayed_work	adsp_voocphy_err_work;
@@ -508,6 +519,7 @@ struct battery_chg_dev {
 	struct mutex			chg_en_lock;
 	bool 				chg_en;
 	bool					cid_status;
+	bool					force_svooc;
 
 	struct delayed_work status_keep_clean_work;
 	struct delayed_work status_keep_delay_unlock_work;
@@ -575,10 +587,18 @@ struct battery_chg_dev {
 	oplus_chg_track_trigger *icl_err_load_trigger;
 	struct delayed_work icl_err_load_trigger_work;
 
+	struct mutex track_adsp_err_lock;
+	u32 debug_pmic_glink_err;
+	bool adsp_err_uploading;
+	oplus_chg_track_trigger *adsp_err_load_trigger;
+	struct delayed_work adsp_err_load_trigger_work;
+
 	struct mutex adsp_track_read_buffer_lock;
 	struct completion adsp_track_read_ack;
 	struct adsp_track_read_resp_msg adsp_track_read_buffer;
 	struct delayed_work adsp_track_notify_work;
+	struct delayed_work mcu_en_init_work;
+	struct delayed_work check_abnormal_usbin_status;
 #endif
 #ifdef OPLUS_FEATURE_CHG_BASIC
 	struct mutex	pps_read_buffer_lock;

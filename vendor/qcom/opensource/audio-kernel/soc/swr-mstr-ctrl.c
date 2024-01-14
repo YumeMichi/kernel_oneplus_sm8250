@@ -284,7 +284,12 @@ static ssize_t swrm_debug_peek_write(struct file *file, const char __user *ubuf,
 
 	lbuf[count] = '\0';
 	rc = get_parameters(lbuf, param, 1);
+#ifndef OPLUS_ARCH_EXTENDS
 	if ((param[0] <= SWR_MSTR_MAX_REG_ADDR) && (rc == 0))
+#else
+	// Add logic to handle invalid address passed to swrm_peek and swrm_poke debugfs node.
+	if ((param[0] <= SWR_MSTR_MAX_REG_ADDR) && (rc == 0) && (param[0] % 4 == 0))
+#endif /*OPLUS_ARCH_EXTENDS*/
 		swrm->read_data = swr_master_read(swrm, param[0]);
 	else
 		rc = -EINVAL;
@@ -321,9 +326,16 @@ static ssize_t swrm_debug_write(struct file *file,
 
 	lbuf[count] = '\0';
 	rc = get_parameters(lbuf, param, 2);
+#ifndef OPLUS_ARCH_EXTEND
 	if ((param[0] <= SWR_MSTR_MAX_REG_ADDR) &&
 		(param[1] <= 0xFFFFFFFF) &&
 		(rc == 0))
+#else
+	// Add logic to handle invalid address passed to swrm_peek and swrm_poke debugfs node.
+	if ((param[0] <= SWR_MSTR_MAX_REG_ADDR) &&
+		(param[1] <= 0xFFFFFFFF) &&
+		(rc == 0) && (param[0] % 4 == 0))
+#endif /*OPLUS_ARCH_EXTENDS*/
 		swr_master_write(swrm, param[0], param[1]);
 	else
 		rc = -EINVAL;

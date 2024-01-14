@@ -530,9 +530,14 @@
 			qcom,sw_vfloat_over_protect_enable;
 			qcom,lpd-disable;
 
+                        //add for PD 9v
+                        oplus,pdqc_9v_voltage_adaptive;
+
 			//for PD9V or QC9V
 			qcom,vbatt_pdqc_to_5v_thr = <4100>;
 			qcom,vbatt_pdqc_to_9v_thr = <4000>;
+
+			oplus,aging_ffc_version = <1>;
 
 			//usbtemp
 			qcom,usbtemp_max_temp_thr = <55>;
@@ -559,6 +564,17 @@
 			pinctrl-7 = <&gpio1_adc_default>;
 			pinctrl-8 = <&input_pg_default>;
 			pinctrl-9 = <&charger_int_default>;
+};
+
+&soc {
+	oplus,track-charge {
+		compatible = "oplus,track-charge";
+		track,fast_chg_break_t_thd = <1000>;
+		track,general_chg_break_t_thd = <200>;
+		track,voocphy_type = <4>;
+		track,wired_max_power = <65000>;
+		track,wired_fast_chg_scheme = <1>;
+	};
 };
 
 &qupv3_se2_i2c {

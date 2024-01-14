@@ -10,11 +10,20 @@
 #include <asm/uaccess.h>
 #include <linux/uaccess.h>
 #include <linux/version.h>
+#ifdef CONFIG_FP_INJECT_ENABLE
+#include "include/fp_fault_inject.h"
+#endif // CONFIG_FP_INJECT_ENABLE
 
 static struct fingerprint_message_t g_fingerprint_msg = {0};
 int g_fp_driver_event_type = FP_DRIVER_INTERRUPT;
 int g_reporte_cond = 0;
 DECLARE_WAIT_QUEUE_HEAD(fp_wait_queue);
+
+void reset_fingerprint_msg(void)
+{
+   g_reporte_cond = 0;
+   memset(&g_fingerprint_msg, 0, sizeof(g_fingerprint_msg));
+}
 
 static void set_event_condition(int state)
 {
@@ -107,6 +116,7 @@ int send_fingerprint_msg(int module, int event, void *data,
     int ret = 0;
     int need_report = 0;
     if (get_fp_driver_evt_type() != FP_DRIVER_INTERRUPT) {
+        pr_info("%s, NETLINK is enable\n", __func__);
         return 0;
     }
     memset(&g_fingerprint_msg, 0, sizeof(g_fingerprint_msg));
@@ -138,6 +148,11 @@ int send_fingerprint_msg(int module, int event, void *data,
         pr_info("unknow module, ignored");
         break;
     }
+#ifdef CONFIG_FP_INJECT_ENABLE
+    fault_inject_fp_msg_hook(&g_fingerprint_msg, &need_report);
+#endif // CONFIG_FP_INJECT_ENABLE
+    pr_debug("%s, event_change:%d - %d, out_size:%d\n", __func__, event, g_fingerprint_msg.event, g_fingerprint_msg.out_size);
+    pr_info("%s, module:%d, event:%d\n", __func__, g_fingerprint_msg.module, g_fingerprint_msg.event);
     if (need_report) {
         ret = wake_up_fingerprint_event(0);
     }

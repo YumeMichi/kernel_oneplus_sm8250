@@ -2323,6 +2323,8 @@
 
 			qcom,support_abnormal_adapter;
 
+			oplus,aging_ffc_version = <1>;
+
 			//for PD9V or QC9V
 			qcom,vbatt_pdqc_to_5v_thr = <4100>;
 
@@ -2397,6 +2399,11 @@
 		track,wls_epp_chg_scheme = <0>;
 		track,wls_fast_chg_scheme = <0>;
 		track,wired_fast_chg_scheme = <1>;
+	};
+
+	oplus_battery_log: oplus,battery_log {
+		compatible = "oplus,battery_log";
+		oplus,battery_log_support;
 	};
 };
 //#endif //OPLUS_FEATURE_CHG_BASIC

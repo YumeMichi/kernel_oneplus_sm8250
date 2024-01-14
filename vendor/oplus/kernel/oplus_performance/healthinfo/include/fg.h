@@ -17,7 +17,16 @@ static inline int current_is_fg(void)
 static inline int task_is_fg(struct task_struct *tsk)
 {
 	int cur_uid;
-	cur_uid = task_uid(tsk).val;
+	const struct cred *tcred;
+
+	rcu_read_lock();
+	tcred = __task_cred(tsk);
+	if (!tcred) {
+		rcu_read_unlock();
+		return 0;
+	}
+	cur_uid = __kuid_val(tcred->uid);
+	rcu_read_unlock();
 	if (is_fg(cur_uid))
 		return 1;
 	return 0;

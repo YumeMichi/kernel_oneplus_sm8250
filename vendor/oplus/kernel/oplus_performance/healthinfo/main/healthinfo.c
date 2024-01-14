@@ -8,9 +8,11 @@
 #include <linux/kobject.h>
 #include <linux/ratelimit.h>
 #include <linux/blkdev.h>
+#include <linux/cgroup.h>
 #ifdef CONFIG_OPLUS_MEM_MONITOR
 #include <linux/healthinfo/memory_monitor.h>
 #endif
+#include <linux/sched_assist/sched_assist_common.h>
 /*#ifdef OPLUS_FEATURE_UFSPLUS
 #if defined(CONFIG_UFSFEATURE)
 #include "../../../drivers/scsi/oufs/ufsfeature.h"
@@ -75,6 +77,33 @@ static struct work_struct ohm_detect_ws;
 static char *ohm_detect_env[MAX_OHMEVENT_PARAM] = { "OHMACTION=uevent", NULL };
 static bool ohm_action_ctrl = false;
 static char msg_buf[OH_MSG_LEN] = {0};
+
+#if IS_ENABLED(CONFIG_CGROUP_SCHED)
+static inline int get_task_cgroup_id(struct task_struct *task)
+{
+	struct cgroup_subsys_state *css = task_css(task, cpu_cgrp_id);
+
+	return css ? css->id : -1;
+}
+#else
+inline int get_task_cgroup_id(struct task_struct *task) { return 0; }
+#endif
+
+#if  IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+/* todo add ux type */
+#endif
+static int test_task_top_app(struct task_struct *task)
+{
+	return (SA_CGROUP_TOP_APP == get_task_cgroup_id(task)) ? 1 : 0;
+}
+static int test_task_sys_bg(struct task_struct *task)
+{
+	 return (SA_CGROUP_SYS_BACKGROUND == get_task_cgroup_id(task)) ? 1 : 0;
+}
+static int test_task_bg(struct task_struct *task)
+{
+	return (SA_CGROUP_BACKGROUND == get_task_cgroup_id(task)) ? 1 : 0;
+}
 
 void ohm_action_trig(int type)
 {
@@ -169,40 +198,79 @@ static inline void ohm_sched_stat_record_common(struct sched_stat_para *sched_st
         }
 }
 
+static inline void _ohm_para_init(struct sched_stat_para *sched_para)
+{
+	sched_para->delta_ms = 0;
+	memset(&sched_para->all, 0, sizeof(struct sched_stat_common));
+	memset(&sched_para->ux, 0, sizeof(struct sched_stat_common));
+	memset(&sched_para->fg, 0, sizeof(struct sched_stat_common));
+	memset(&sched_para->top, 0, sizeof(struct sched_stat_common));
+	memset(&sched_para->bg, 0, sizeof(struct sched_stat_common));
+	memset(&sched_para->sysbg, 0, sizeof(struct sched_stat_common));
+}
+
+static inline int oplus_get_im_flag(struct task_struct *task)
+{
+	return task->im_flag;
+}
+
+static inline void clear_health_date(struct task_struct *p, struct sched_stat_para *sched_para)
+{
+	int im_flag = IM_FLAG_NONE;
+
+	if (p && p->group_leader)
+		im_flag = oplus_get_im_flag(p->group_leader);
+	if (im_flag == IM_FLAG_MIDASD)
+		 _ohm_para_init(sched_para);
+}
+
 #ifdef OPLUS_FEATURE_SCHED_ASSIST
 extern bool test_task_ux(struct task_struct *task);
 #endif
 void ohm_schedstats_record(int sched_type, struct task_struct *task, u64 delta_ms)
 {
-    struct sched_stat_para *sched_stat = &sched_para[sched_type];
-    static DEFINE_RATELIMIT_STATE(ratelimit, 60*HZ, 1);
+	struct sched_stat_para *sched_stat = &sched_para[sched_type];
+	static DEFINE_RATELIMIT_STATE(ratelimit, 60*HZ, 1);
+	unsigned long flags;
 	struct long_wait_record *plwr;
 	struct timespec64 ts;
 	u32 index;
 
-    if (unlikely(!sched_stat->ctrl)){
-        return;
-    }
+	spin_lock_irqsave(&sched_stat->lock, flags);
+	if (unlikely(!sched_stat->ctrl)) {
+		spin_unlock_irqrestore(&sched_stat->lock, flags);
+		return;
+	}
 
-    sched_stat->delta_ms = delta_ms;
-    ohm_sched_stat_record_common(sched_stat, &sched_stat->all, delta_ms);
+	sched_stat->delta_ms = delta_ms;
+	ohm_sched_stat_record_common(sched_stat, &sched_stat->all, delta_ms);
 
-    if (task_is_fg(task)) {
-        ohm_sched_stat_record_common(sched_stat, &sched_stat->fg, delta_ms);
-        if (unlikely(delta_ms >= sched_stat->high_thresh_ms)){
-             if (sched_para[sched_type].logon  && __ratelimit(&ratelimit)) {
-                        ohm_debug_deferred("[%s / %s] high_cnt, delay = %llu ms\n",
-                                sched_list[sched_type], "fg", delta_ms);
-                }
-             if (sched_para[sched_type].trig)
-                ohm_action_trig(sched_type);
-        }
-    }
+	if (task_is_fg(task)) {
+		ohm_sched_stat_record_common(sched_stat, &sched_stat->fg, delta_ms);
+		if (unlikely(delta_ms >= sched_stat->high_thresh_ms)) {
+			if (sched_para[sched_type].logon  && __ratelimit(&ratelimit)) {
+				ohm_debug_deferred("[%s / %s] high_cnt, delay = %llu ms\n",
+					sched_list[sched_type], "fg", delta_ms);
+			}
+		if (sched_para[sched_type].trig)
+			ohm_action_trig(sched_type);
+		}
+	}
 #ifdef OPLUS_FEATURE_SCHED_ASSIST
 	if (test_task_ux(task)){
-        ohm_sched_stat_record_common(sched_stat, &sched_stat->ux, delta_ms);
-    }
+		ohm_sched_stat_record_common(sched_stat, &sched_stat->ux, delta_ms);
+	}
 #endif
+	if (test_task_top_app(task)) {
+		ohm_sched_stat_record_common(sched_stat, &sched_stat->top, delta_ms);
+	}
+	if (test_task_bg(task)) {
+		ohm_sched_stat_record_common(sched_stat, &sched_stat->bg, delta_ms);
+	}
+	if (test_task_sys_bg(task)) {
+		ohm_sched_stat_record_common(sched_stat, &sched_stat->sysbg, delta_ms);
+	}
+
 	if (unlikely(delta_ms >= sched_stat->low_thresh_ms)) {
 		index = (u32)atomic_inc_return(&sched_stat->lwr_index);
 		plwr = &sched_stat->last_n_lwr[index & LWR_MASK];
@@ -214,8 +282,9 @@ void ohm_schedstats_record(int sched_type, struct task_struct *task, u64 delta_m
 
 		plwr->ms = delta_ms;
 	}
+	spin_unlock_irqrestore(&sched_stat->lock, flags);
 
-    return;
+	return;
 }
 
 /****  Ctrl init  ****/
@@ -380,31 +449,22 @@ void ohm_ctrl_init(void)
         return;
 }
 
-static inline void _ohm_para_init(struct sched_stat_para *sched_para)
-{
-	   sched_para->delta_ms = 0;
-	   memset(&sched_para->all, 0 , sizeof(struct sched_stat_common));
-	   memset(&sched_para->ux, 0 , sizeof(struct sched_stat_common));
-	   memset(&sched_para->fg, 0 , sizeof(struct sched_stat_common));
-
-	   return;
-}
-
 void ohm_para_init(void)
 {
-        int i;
-        for (i = 0 ;i < OHM_SCHED_TOTAL ;i++ ) {
-               _ohm_para_init(&sched_para[i]);
-               sched_para[i].low_thresh_ms = 100;
-               sched_para[i].high_thresh_ms = 500;
-        }
-        sched_para[OHM_SCHED_EMMCIO].low_thresh_ms = 100;
-        sched_para[OHM_SCHED_EMMCIO].high_thresh_ms = 200;
-        ohm_ctrl_init();
-        ohm_logon_init();
-        ohm_trig_init();
-        ohm_debug("origin list: ctrl 0x%08x, logon 0x%08x, trig 0x%08x\n", ohm_ctrl_list, ohm_logon_list, ohm_trig_list);
-        return;
+	int i;
+	for (i = 0 ; i < OHM_SCHED_TOTAL; i++) {
+		_ohm_para_init(&sched_para[i]);
+		spin_lock_init(&sched_para[i].lock);
+		sched_para[i].low_thresh_ms = 100;
+		sched_para[i].high_thresh_ms = 500;
+	}
+	sched_para[OHM_SCHED_EMMCIO].low_thresh_ms = 100;
+	sched_para[OHM_SCHED_EMMCIO].high_thresh_ms = 200;
+	ohm_ctrl_init();
+	ohm_logon_init();
+	ohm_trig_init();
+	ohm_debug("origin list: ctrl 0x%08x, logon 0x%08x, trig 0x%08x\n", ohm_ctrl_list, ohm_logon_list, ohm_trig_list);
+	return;
 }
 
 #define LATENCY_STRING_FORMAT(BUF, MODULE, SCHED_STAT) sprintf(BUF, \
@@ -415,7 +475,13 @@ void ohm_para_init(void)
         #MODULE"_fg_max_ms: %llu\n"#MODULE"_fg_high_cnt: %llu\n"#MODULE"_fg_low_cnt: %llu\n" \
         #MODULE"_fg_total_ms: %llu\n"#MODULE"_fg_total_cnt: %llu\n" \
         #MODULE"_ux_max_ms: %llu\n"#MODULE"_ux_high_cnt: %llu\n"#MODULE"_ux_low_cnt: %llu\n" \
-        #MODULE"_ux_total_ms: %llu\n"#MODULE"_ux_total_cnt: %llu\n", \
+        #MODULE"_ux_total_ms: %llu\n"#MODULE"_ux_total_cnt: %llu\n" \
+	#MODULE"_top_app_max_ms: %llu\n"#MODULE"_top_app_high_cnt: %llu\n"#MODULE"_top_app_low_cnt: %llu\n" \
+	#MODULE"_top_app_total_ms: %llu\n"#MODULE"_top_app_total_cnt: %llu\n" \
+	#MODULE"_bg_max_ms: %llu\n"#MODULE"_bg_high_cnt: %llu\n"#MODULE"_bg_low_cnt: %llu\n" \
+	#MODULE"_bg_total_ms: %llu\n"#MODULE"_bg_total_cnt: %llu\n" \
+	#MODULE"_sys_bg_max_ms: %llu\n"#MODULE"_sys_bg_high_cnt: %llu\n"#MODULE"_sys_bg_low_cnt: %llu\n" \
+	#MODULE"_sys_bg_total_ms: %llu\n"#MODULE"_sys_bg_total_cnt: %llu\n", \
         SCHED_STAT->ctrl ? "true":"false", \
         SCHED_STAT->logon ? "true":"false", \
         SCHED_STAT->trig ? "true":"false", \
@@ -436,7 +502,22 @@ void ohm_para_init(void)
         SCHED_STAT->ux.high_cnt, \
         SCHED_STAT->ux.low_cnt, \
         SCHED_STAT->ux.total_ms, \
-        SCHED_STAT->ux.total_cnt)
+        SCHED_STAT->ux.total_cnt, \
+	SCHED_STAT->top.max_ms, \
+	SCHED_STAT->top.high_cnt, \
+	SCHED_STAT->top.low_cnt, \
+	SCHED_STAT->top.total_ms, \
+	SCHED_STAT->top.total_cnt, \
+	SCHED_STAT->bg.max_ms, \
+	SCHED_STAT->bg.high_cnt, \
+	SCHED_STAT->bg.low_cnt, \
+	SCHED_STAT->bg.total_ms, \
+	SCHED_STAT->bg.total_cnt, \
+	SCHED_STAT->sysbg.max_ms, \
+	SCHED_STAT->sysbg.high_cnt, \
+	SCHED_STAT->sysbg.low_cnt, \
+	SCHED_STAT->sysbg.total_ms, \
+	SCHED_STAT->sysbg.total_cnt)
 
 #define LWR_STRING_FORMAT(BUF, LENGTH, SCHED_STAT)														\
 do {																									\
@@ -509,13 +590,17 @@ static ssize_t sched_latency_read(struct file *filp, char __user *buff, size_t c
 {
 	int len = 0;
 	int ret_len = 0;
+	unsigned long flags;
 	struct sched_stat_para *sched_stat = &sched_para[OHM_SCHED_SCHEDLATENCY];
 	char *page = kzalloc(BUFFER_SIZE_L, GFP_KERNEL);
 	if (!page) {
 		return -ENOMEM;
 	}
+	spin_lock_irqsave(&sched_stat->lock, flags);
 	len = LATENCY_STRING_FORMAT(page, sched_latency, sched_stat);
 	LWR_STRING_FORMAT(page, len, sched_stat);
+	clear_health_date(current, sched_stat);
+	spin_unlock_irqrestore(&sched_stat->lock, flags);
 	ret_len = sched_data_to_user(buff, count, off, page, len);
 	kfree(page);
 	return ret_len;
@@ -530,13 +615,17 @@ static ssize_t iowait_read(struct file *filp, char __user *buff, size_t count, l
 {
 	int len = 0;
 	int ret_len = 0;
+	unsigned long flags;
 	struct sched_stat_para *sched_stat = &sched_para[OHM_SCHED_IOWAIT];
 	char *page = kzalloc(BUFFER_SIZE_L, GFP_KERNEL);
 	if (!page) {
 		return -ENOMEM;
 	}
+	spin_lock_irqsave(&sched_stat->lock, flags);
 	len = LATENCY_STRING_FORMAT(page, iowait, sched_stat);
 	LWR_STRING_FORMAT(page, len, sched_stat);
+	clear_health_date(current, sched_stat);
+	spin_unlock_irqrestore(&sched_stat->lock, flags);
 	ret_len = sched_data_to_user(buff, count, off, page, len);
 	kfree(page);
 	return ret_len;
@@ -551,14 +640,17 @@ static ssize_t fsync_wait_read(struct file *filp, char __user *buff, size_t coun
 {
 	int len = 0;
 	int ret_len = 0;
+	unsigned long flags;
 	struct sched_stat_para *sched_stat = &sched_para[OHM_SCHED_FSYNC];
 	char *page = kzalloc(BUFFER_SIZE_L, GFP_KERNEL);
         if (!page) {
                 return -ENOMEM;
         }
-
+	spin_lock_irqsave(&sched_stat->lock, flags);
 	len = LATENCY_STRING_FORMAT(page, fsync, sched_stat);
 	LWR_STRING_FORMAT(page, len, sched_stat);
+	clear_health_date(current, sched_stat);
+	spin_unlock_irqrestore(&sched_stat->lock, flags);
 	ret_len = sched_data_to_user(buff, count, off, page, len);
 	kfree(page);
 	return ret_len;
@@ -575,13 +667,17 @@ static ssize_t emmcio_read(struct file *filp, char __user *buff, size_t count, l
 {
 	int len = 0;
 	int ret_len = 0;
+	unsigned long flags;
 	struct sched_stat_para *sched_stat = &sched_para[OHM_SCHED_EMMCIO];
 	char *page = kzalloc(BUFFER_SIZE_L, GFP_KERNEL);
 	if (!page) {
                 return -ENOMEM;
         }
+	spin_lock_irqsave(&sched_stat->lock, flags);
 	len = LATENCY_STRING_FORMAT(page, emmcio, sched_stat);
 	LWR_STRING_FORMAT(page, len, sched_stat);
+	clear_health_date(current, sched_stat);
+	spin_unlock_irqrestore(&sched_stat->lock, flags);
 	ret_len = sched_data_to_user(buff, count, off, page, len);
 	kfree(page);
 	return ret_len;
@@ -597,13 +693,17 @@ static ssize_t dstate_read(struct file *filp, char __user *buff, size_t count, l
 {
         int len = 0;
 	int ret_len = 0;
+	unsigned long flags;
         struct sched_stat_para *sched_stat = &sched_para[OHM_SCHED_DSTATE];
 	char *page = kzalloc(BUFFER_SIZE_L, GFP_KERNEL);
 	if (!page) {
                 return -ENOMEM;
         }
+	spin_lock_irqsave(&sched_stat->lock, flags);
 	len = LATENCY_STRING_FORMAT(page, dstate, sched_stat);
 	LWR_STRING_FORMAT(page, len, sched_stat);
+	clear_health_date(current, sched_stat);
+	spin_unlock_irqrestore(&sched_stat->lock, flags);
 	ret_len = sched_data_to_user(buff, count, off, page, len);
 	kfree(page);
 	return ret_len;
@@ -786,7 +886,7 @@ static ssize_t ohm_para_write(struct file *file, const char __user *buff, size_t
         char ctrl_list[32] = {0};
 	int action_ctrl;
 
-	if(len > 31)
+	if(len > 31 || len == 0)
 		return -EFAULT;
 
         if (copy_from_user(&write_data, buff, len)) {
@@ -859,14 +959,10 @@ static const struct file_operations proc_iowait_hung_fops = {
 extern unsigned int cpufreq_quick_get_max(unsigned int cpu);
 static ssize_t cpu_info_read(struct file *filp, char __user *buff, size_t count, loff_t *off)
 {
+	char page[BUFFER_SIZE_L] = {0};
 	int len = 0;
 	unsigned int cpu;
 	unsigned long scale_capacity = 0, last_capacity = 0;
-	char *page = kzalloc(BUFFER_SIZE_L, GFP_KERNEL);
-	int ret_len = 0;
-	if (!page) {
-		return -ENOMEM;
-	}
     for_each_possible_cpu(cpu) {
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 	scale_capacity = arch_scale_cpu_capacity(NULL,cpu);
@@ -879,9 +975,8 @@ static ssize_t cpu_info_read(struct file *filp, char __user *buff, size_t count,
         last_capacity = scale_capacity;
         len += snprintf(page + len, sizeof(page) - len, "%u ", cpufreq_quick_get_max(cpu));
     }
-	ret_len = sched_data_to_user(buff, count, off, page, len);
-	kfree(page);
-	return ret_len;
+
+	return sched_data_to_user(buff, count, off, page, len);
 }
 
 static const struct file_operations proc_cpu_info_fops = {
@@ -921,7 +1016,7 @@ static ssize_t ohm_thresh_write_common(struct file *file, const char __user *buf
         char thresh_list[32] = {0};
         int thresh = 0;
 
-	if(len > 31)
+	if(len > 31 || len == 0)
 		return -EFAULT;
 
         if (copy_from_user(&write_data, buff, len)) {

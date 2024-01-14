@@ -81,6 +81,7 @@
 #include "../voocphy/oplus_voocphy.h"
 #include <tcpm.h>
 
+#define DEFAULT_BATTERY_TMP_WHEN_ERROR	-400
 static bool em_mode = false;
 static bool is_vooc_project(void);
 struct oplus_chg_chip *g_oplus_chip = NULL;
@@ -5812,13 +5813,27 @@ static int mt_ac_get_property(struct power_supply *psy,
 	int rc = 0;
 
 	rc = oplus_ac_get_property(psy, psp, val);
+	if (rc < 0) {
+		val->intval = 0;
+	}
+
 	return rc;
 }
 
 static int mt_usb_get_property(struct power_supply *psy,
 	enum power_supply_property psp, union power_supply_propval *val)
 {
-	return oplus_usb_get_property(psy, psp, val);
+	int rc = 0;
+
+	switch (psp) {
+	default:
+		rc = oplus_usb_get_property(psy, psp, val);
+		if (rc < 0) {
+			val->intval = 0;
+		}
+	}
+
+	return rc;
 }
 
 static int battery_prop_is_writeable(struct power_supply *psy,
@@ -5839,24 +5854,27 @@ static int battery_get_property(struct power_supply *psy,
 	int rc = 0;
 
 	switch (psp) {
-		case POWER_SUPPLY_PROP_CAPACITY_LEVEL:
-			val->intval = POWER_SUPPLY_CAPACITY_LEVEL_NORMAL;
-			if (g_oplus_chip && (g_oplus_chip->ui_soc == 0)) {
-				val->intval = POWER_SUPPLY_CAPACITY_LEVEL_CRITICAL;
-					chg_err("bat pro POWER_SUPPLY_CAPACITY_LEVEL_CRITICAL, should shutdown!!!\n");
-				}
-			break;
-		case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
-			if (g_oplus_chip) {
-				val->intval = g_oplus_chip->batt_fcc * 1000;
+	case POWER_SUPPLY_PROP_CAPACITY_LEVEL:
+		val->intval = POWER_SUPPLY_CAPACITY_LEVEL_NORMAL;
+		if (g_oplus_chip && (g_oplus_chip->ui_soc == 0)) {
+			val->intval = POWER_SUPPLY_CAPACITY_LEVEL_CRITICAL;
+				chg_err("bat pro POWER_SUPPLY_CAPACITY_LEVEL_CRITICAL, should shutdown!!!\n");
 			}
-			break;
-		case POWER_SUPPLY_PROP_TIME_TO_FULL_NOW:
-			val->intval = 0;
-			break;
-		default:
-			rc = oplus_battery_get_property(psy, psp, val);
-			break;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
+		if (g_oplus_chip) {
+			val->intval = g_oplus_chip->batt_fcc * 1000;
+		}
+		break;
+	default:
+		rc = oplus_battery_get_property(psy, psp, val);
+		if (rc < 0) {
+			if (psp == POWER_SUPPLY_PROP_TEMP)
+				val->intval = DEFAULT_BATTERY_TMP_WHEN_ERROR;
+			else
+				val->intval = 0;
+		}
+		break;
 	}
 
 	return 0;
@@ -6292,7 +6310,10 @@ int oplus_mt6360_pd_setup(void)
 				vbus_mv = VBUS_5V;
 				ibus_ma = IBUS_2A;
 			}
-
+			if (!pinfo->data.dual_charger_support) {
+				vbus_mv = VBUS_5V;
+				ibus_ma = IBUS_3A;
+			}
 			printk(KERN_ERR "PD request: %dmV, %dmA\n", vbus_mv, ibus_ma);
 			ret = oplus_pdc_setup(&vbus_mv, &ibus_ma);
 		} else {
@@ -6301,7 +6322,10 @@ int oplus_mt6360_pd_setup(void)
 				|| chip->temperature > 420 || chip->cool_down_force_5v == true)) {
 				vbus_mv = VBUS_5V;
 				ibus_ma = IBUS_3A;
-
+				if (!pinfo->data.dual_charger_support) {
+					vbus_mv = VBUS_5V;
+					ibus_ma = IBUS_3A;
+				}
 				printk(KERN_ERR "PD request: %dmV, %dmA\n", vbus_mv, ibus_ma);
 				ret = oplus_pdc_setup(&vbus_mv, &ibus_ma);
 			}
@@ -7692,7 +7716,7 @@ static int mtk_charger_probe(struct platform_device *pdev)
 	chg_err("oplus_chg_init!\n");
 	oplus_chg_init(oplus_chip);
 
-	if (oplus_chg_get_voocphy_support() == true || is_vooc_support_single_batt_svooc() == true) {
+	if (oplus_chg_get_voocphy_support() != NO_VOOCPHY || is_vooc_support_single_batt_svooc() == true) {
 		is_mtksvooc_project = true;
 		chg_err("support voocphy or is mcu vooc support, is_mtksvooc_project is true!\n");
 	}

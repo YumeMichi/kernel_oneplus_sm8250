@@ -36,6 +36,6 @@
 	qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0","pw_bb_clk2";
 };
 &mdss_mdp {
-	pxlw,dsi-display-primary-active = "qcom,mdss_dsi_oppo19811_samsung_1440_3168_dsc_cmd";
+	pxlw,dsi-display-primary-active = "qcom,mdss_dsi_oplus19811_samsung_1440_3168_dsc_cmd";
 	pxlw,dsi-display-secondary-active = "qcom,mdss_dsi_samsung_ana6706_dsc_cmd_2nd";
 };

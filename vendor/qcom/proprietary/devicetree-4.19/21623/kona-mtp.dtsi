@@ -443,7 +443,7 @@
 
 			/*rf type*/
 			rf_match_support;
-			rf-patterns = <0 0 0 0 0 0 0 0 0 4 4 5 5 6 6 7 7>;
+			rf-patterns = <0 0 0 0 1 1 4 0 0 4 4 5 5 6 6 7 7>;
 		};
 
 		device_0 {
@@ -1841,7 +1841,7 @@ board_temp-usr {
 		qcom,oplus_batt_4400mv;
 		qcom,support_vooc_by_normal_charger_path;
 		qcom,vooc_fw_update_newmethod;
-		//qcom,smart_chg_bcc_support;
+		qcom,smart_chg_bcc_support;
 		qcom,vooc-low-temp = <0>;
 		qcom,vooc-high-temp = <500>;
 		qcom,vooc-low-soc = <1>;
@@ -2372,6 +2372,7 @@ board_temp-usr {
 
 			//for PD9V or QC9V
 			qcom,vbatt_pdqc_to_5v_thr = <4100>;
+			oplus,pdqc_9v_voltage_adaptive;
 
 			qcom,vooc_show_ui_soc_decimal;
 			qcom,ui_soc_decimal_speedmin = <20>;//2A

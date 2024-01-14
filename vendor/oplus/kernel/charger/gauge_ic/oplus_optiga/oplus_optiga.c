@@ -1,14 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
- * LEDs driver for GPIOs
- *
- * Copyright (C) 2007 8D Technologies inc.
- * Raphael Assenat <raph@8d.com>
- * Copyright (C) 2008 Freescale Semiconductor, Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
+ * Copyright (C) 2018-2023 Oplus. All rights reserved.
  */
 #include <linux/err.h>
 #include <linux/gpio.h>
@@ -32,6 +24,15 @@
 #include "../../oplus_gauge.h"
 #include "../../oplus_charger.h"
 #include <linux/gpio/consumer.h>
+
+/* for read battery barcode */
+#define BARCODE_MAX_SIZE 32
+#define BARCODE_PROPER_READ_PAGE_CNT 2 /* 8bytes in every page*/
+#define BARCODE_SUBSTR_OFFSET 2
+#define BARCODE_READ_MAX_RETRIES 3
+static bool g_drv_init_done = false;
+static uint8_t g_batt_barcode[BARCODE_MAX_SIZE] = {0};
+static int g_batt_id = UNKNOWN_VENDOR;
 
 struct oplus_optiga_chip *g_oplus_optiga_chip;
 #define DEFAULT_ADDR       0x00
@@ -58,7 +59,6 @@ struct oplus_optiga_chip *g_oplus_optiga_chip;
 #include "pinconf.h"
 #include "pinctrl-msm.h"
 #include "pinctrl-utils.h"
-
 
 #define gpio_reg_set(reg, value) ({__iowmb(); writel_relaxed_no_log(value,reg);})
 
@@ -189,6 +189,69 @@ void set_optiga_pin_dir(uint8_t dir) {
 #endif /* CONFIG_OPLUS_OPTIGA_LOW_DELAY */
 }
 
+int oplus_optiga_parse_batt_info_dt(struct oplus_optiga_chip *chip)
+{
+	int rc;
+	struct device_node *node = chip->dev->of_node;
+	struct optiga_batt_vendor_info *vendor_info_buffer;
+	const char *str_buf = NULL;
+	int length, i = 0;
+
+	rc = of_property_count_elems_of_size(node, "oplus,optiga_batt_info", sizeof(int));
+	if (rc < 0) {
+		chg_err("Count oplus,optiga_batt_info failed, rc=%d\n", rc);
+		return rc;
+	}
+	length = rc;
+	chip->barcode_num = (length * sizeof(int)) / sizeof(struct optiga_batt_vendor_info);
+
+	if (chip->barcode_num > MAX_BARCODE_NUM) {
+		chg_err("barcode:%d out of max num!\n", chip->barcode_num);
+		return rc;
+	}
+
+	if (length != 0 && (length * sizeof(int)) % sizeof(struct optiga_batt_vendor_info) == 0) {
+		vendor_info_buffer = devm_kzalloc(chip->dev,
+		                                  chip->barcode_num * sizeof(struct optiga_batt_vendor_info), GFP_KERNEL);
+
+		if (vendor_info_buffer) {
+			rc = of_property_read_u32_array(node, "oplus,optiga_batt_info",
+			                                (int *)vendor_info_buffer, length);
+			if (rc < 0) {
+				chg_err("parse oplus,optiga_batt_info failed, rc=%d\n", rc);
+				        devm_kfree(chip->dev, vendor_info_buffer);
+				chip->barcode_num = 0;
+			} else {
+				chg_info("oplus,optiga_batt_info barcode_num =%d\n", chip->barcode_num);
+				for (i = 0; i < chip->barcode_num; i++) {
+					memcpy(&(chip->batt_data[i]), vendor_info_buffer,
+					       sizeof(struct optiga_batt_vendor_info));
+					chg_info("vendor_index:%d , module:%d, core:%d, limited vol:%d\n",
+					         chip->batt_data[i].vendor_data.vendor_index,
+					         chip->batt_data[i].vendor_data.module_vendor,
+					         chip->batt_data[i].vendor_data.core_vendor,
+					         chip->batt_data[i].vendor_data.core_limited_vol);
+
+					vendor_info_buffer++;
+
+					rc = of_property_read_string_index(node, "oplus,batt_barcode", i, &str_buf);
+					if (rc < 0) {
+						chg_err("parse oplus,batt_barcode failed, rc=%d\n", rc);
+						break;
+					}
+					strncpy(chip->batt_data[i].barcode_str, str_buf, BARCODE_SUBSTR_SIZE - 1);
+					chip->batt_data[i].barcode_str[BARCODE_SUBSTR_SIZE - 1] = '\0';
+					chg_info("i:%d, dts barcode:%s\n", i, chip->batt_data[i].barcode_str);
+				}
+			}
+		}
+	} else {
+		chg_info("oplus,optiga_batt_info error. length:%d, barcode num:%d\n",
+		         length, chip->barcode_num);
+	}
+	return rc;
+}
+
 int oplus_optiga_parse_dt(struct oplus_optiga_chip *chip)
 {
 	int rc;
@@ -213,9 +276,6 @@ int oplus_optiga_parse_dt(struct oplus_optiga_chip *chip)
 			if (rc) {
 				chg_err("unable to request gpio [%d]\n", chip->data_gpio);
 				return -1;
-			} else {
-				chg_err("chip->data_gpio: [%d]\n", chip->data_gpio);
-				gpio_direction_output(g_oplus_optiga_chip->data_gpio, 0);
 			}
 		} else {
 			chg_err("optiga data_gpio invalid\n");
@@ -235,7 +295,59 @@ int oplus_optiga_parse_dt(struct oplus_optiga_chip *chip)
 
 	chip->support_optiga_in_lk = of_property_read_bool(node, "support_optiga_in_lk");
 	chg_err("support_optiga_in_lk: %d\n", chip->support_optiga_in_lk);
+
+	chip->barcode_read_support = of_property_read_bool(node, "barcode_read_support");
+	chg_err("barcode_read_support: %d\n", chip->barcode_read_support);
+
+	if (chip->barcode_read_support) {
+		rc = oplus_optiga_parse_batt_info_dt(chip);
+		if (rc)
+			chg_err("optiga parse batt info err: %d!\n", rc);
+	}
 	return 0;
+}
+
+/* ret vendor_index */
+static int oplus_optiga_chk_barcode(void)
+{
+	uint8_t sub_tmp[BARCODE_SUBSTR_SIZE] = {0};
+	int i = 0;
+	char *str = g_batt_barcode;
+	struct oplus_optiga_chip *chip = g_oplus_optiga_chip;
+
+	if (chip->barcode_num <= 0 ||
+	    chip->barcode_num > MAX_BARCODE_NUM) {
+		chg_err("barcode num is err! return\n");
+		g_batt_id = UNKNOWN_VENDOR;
+		return g_batt_id;
+	}
+
+	strncpy(sub_tmp, str + BARCODE_SUBSTR_OFFSET, BARCODE_SUBSTR_SIZE - 1);
+	sub_tmp[BARCODE_SUBSTR_SIZE - 1] = '\0';
+	chg_info("barcode sub_tmp:%s \n", sub_tmp);
+
+	for (i = 0; i < chip->barcode_num; i++) {
+		if (!strcmp(sub_tmp, chip->batt_data[i].barcode_str)) {
+			chg_info("module vendor:%d\n",
+			         chip->batt_data[i].vendor_data.module_vendor);
+			g_batt_id = chip->batt_data[i].vendor_data.vendor_index;
+			g_oplus_optiga_chip->right_barcode_index = i;
+			return g_batt_id;
+		}
+	}
+	g_batt_id = UNKNOWN_VENDOR;
+	g_oplus_optiga_chip->right_barcode_index = MAX_BARCODE_NUM;
+	return g_batt_id;
+}
+
+bool oplus_optiga_get_init_done(void)
+{
+	return g_drv_init_done;
+}
+
+int oplus_get_batt_id_use_barcode(void)
+{
+	return g_batt_id;
 }
 
 int optiga_authenticate(void){
@@ -245,6 +357,9 @@ int optiga_authenticate(void){
 	static S_OPTIGA_PUID stDetectedPuids[MAX_DEV];
 	static int first_read_uid = 0;
 	unsigned long flags;
+	uint16_t result = APP_NVM_INIT;
+	int retry = 0;
+	int i = 0;
 
 	chg_err("optiga_authenticate devloop:%d\n",devloop);
 	timing_init();
@@ -289,6 +404,36 @@ int optiga_authenticate(void){
 
 	//Swi_SetAddress(1);
 	spin_unlock_irqrestore(&g_oplus_optiga_chip->slock, flags);
+
+	/* read battery barcode */
+	if (g_oplus_optiga_chip->barcode_read_support) {
+		do {
+			memset(g_batt_barcode, 0, sizeof(g_batt_barcode));
+			result = nvm_read_page(NVM_PAGE_BARCODE_ADDR, BARCODE_PROPER_READ_PAGE_CNT, &g_batt_barcode[0]);
+			if (result == INF_SWI_SUCCESS) {
+				chg_info("nvm_read_page read barcode succ\n");
+				break;
+			} else {
+				retry++;
+				chg_err("nvm_read_page read barcode fail: 0x%x, retry: %d\n", result, retry);
+				usleep_range(5000, 5000);
+			}
+		} while (retry < BARCODE_READ_MAX_RETRIES);
+
+		for (i = 0; i < BARCODE_MAX_SIZE; i++) {
+			chg_info("batt_barcode[%d]:0x%x\n", i, g_batt_barcode[i]);
+		}
+		g_batt_barcode[BARCODE_MAX_SIZE - 1] = '\0';
+		chg_info("batt_barcode:%s read succ\n", g_batt_barcode);
+		if (oplus_optiga_chk_barcode() == UNKNOWN_VENDOR) {
+			chg_err("barcode is not right, non std batt, return\n");
+
+			spin_lock_irqsave(&g_oplus_optiga_chip->slock, flags);
+			Swi_PowerDownCmd();
+			spin_unlock_irqrestore(&g_oplus_optiga_chip->slock, flags);
+			return ret;
+		}
+	}
 
 #ifdef BURST_READ_INTERVAL
 	usleep_range(5000, 5000);
@@ -511,6 +656,7 @@ static bool oplus_optia_check_auth_msg(void) {
 #endif
 	return ret;
 }
+
 static int oplus_optiga_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -561,6 +707,8 @@ static int oplus_optiga_probe(struct platform_device *pdev)
 		g_oplus_optiga_chip->hmac_status.authenticate_result = true;
 	} else {
 		chg_err("get lk auth failed or not support auth in LK.\n");
+		gpio_direction_output(g_oplus_optiga_chip->data_gpio, 0);
+		chg_err("g_oplus_optiga_chip->data_gpio: [%d]\n", g_oplus_optiga_chip->data_gpio);
 		while (retry < OPLUS_OPTIGA_RETRY_COUNT) {
 			ret = oplus_optiga_get_external_auth_hmac();
 			if (ret) {
@@ -587,6 +735,7 @@ static int oplus_optiga_probe(struct platform_device *pdev)
 	external_auth_chip->get_hmac_test_result = oplus_optiga_get_test_result;
 	external_auth_chip->get_hmac_status = oplus_optiga_get_hmac_status;
 	oplus_external_auth_init(external_auth_chip);
+	g_drv_init_done = true;
 	chg_err("oplus_optiga_probe sucess\n");
 	return 0;
 

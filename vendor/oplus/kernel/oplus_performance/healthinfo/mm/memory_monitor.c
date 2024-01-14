@@ -83,11 +83,15 @@ static int alloc_wait_h_ms = 500;
 static int alloc_wait_l_ms = 100;
 static int alloc_wait_log_ms = 1000;
 static int alloc_wait_trig_ms = 10000;
+/* 2 jiffies for HZ=250 */
+static int alloc_wait_detail_ms = 5;
 
 static int ion_wait_h_ms = 500;
 static int ion_wait_l_ms = 100;
 static int ion_wait_log_ms = 1000;
 static int ion_wait_trig_ms = 10000;
+/* 2 jiffies for HZ=250 */
+static int ion_wait_detail_ms = 5;
 
 #ifdef OPLUS_FEATURE_SCHED_ASSIST
 extern bool test_task_ux(struct task_struct *task);
@@ -146,7 +150,7 @@ void memory_alloc_monitor(gfp_t gfp_mask, unsigned int order, u64 wait_ms)
 		allocwait_para.total_alloc_wait.low_cnt++;
 	}
 
-	if (unlikely(wait_ms >= alloc_wait_l_ms)) {
+	if (unlikely(wait_ms >= alloc_wait_detail_ms) && ux) {
 		index = (u32)atomic_inc_return(&allocwait_para.lwr_index);
 		plwr = &allocwait_para.last_n_lwr[index & LWR_MASK];
 		plwr->pid = (u32)current->pid;
@@ -203,7 +207,7 @@ void ionwait_monitor(u64 wait_ms)
     		ionwait_para.total_ion_wait.low_cnt++;
 	}
 
-	if (unlikely(wait_ms >= ion_wait_l_ms)) {
+	if (unlikely(wait_ms >= ion_wait_detail_ms) && ux) {
 		index = (u32)atomic_inc_return(&ionwait_para.lwr_index);
 		plwr = &ionwait_para.last_n_lwr[index & LWR_MASK];
 		plwr->pid = (u32)current->pid;

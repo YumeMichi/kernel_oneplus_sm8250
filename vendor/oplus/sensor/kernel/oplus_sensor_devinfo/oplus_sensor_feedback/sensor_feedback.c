@@ -220,7 +220,7 @@ static ssize_t hal_info_store(struct device *dev,
     memset(strbuf, 0, 32);
     memset(payload, 0, 1024);
 
-    err = sscanf(buf, "%u %u %31s", &event_id, &event_ct, strbuf);
+	err = sscanf(buf, "%hu %hu %31s", &event_id, &event_ct, strbuf);
 
     if (err < 0) {
         pr_err("hal_info_store error: err = %d\n", err);

@@ -193,7 +193,8 @@
                 tfa9874_vdd-supply = <&pm8150_s4>;
                 tfa_min_range = <5000>;
                 tfa_max_range = <8000>;
-                status = "ok";
+		tfa_channel = <1>;
+		status = "ok";
         };
 	tfa98xx@35 {
                 compatible = "nxp,tfa98xx";
@@ -201,6 +202,7 @@
                 tfa9874_vdd-supply = <&pm8150_s4>;
                 tfa_min_range = <5000>;
                 tfa_max_range = <8000>;
+		tfa_channel = <0>;
                 status = "ok";
         };
 	/* #endif OPLUS_ARCH_EXTENDS */

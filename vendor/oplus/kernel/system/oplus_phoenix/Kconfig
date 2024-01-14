@@ -18,3 +18,9 @@ config OPLUS_FEATURE_PHOENIX_REBOOT_SPEED
     default n
     help
       define this config to init oplus phoenix project.
+
+config OPLUS_PHX_WDT_INCREASE
+    tristate "oplus phoenix project increase timeout"
+    default n
+    help
+      define this config to increase WDT.

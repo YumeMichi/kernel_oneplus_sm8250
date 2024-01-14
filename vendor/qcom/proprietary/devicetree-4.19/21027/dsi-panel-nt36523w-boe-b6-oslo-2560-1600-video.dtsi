@@ -39,6 +39,7 @@
 		qcom,mdss-dsi-max-refresh-rate = <120>;
 		qcom,mdss-pan-physical-width-dimension = <147>;
 		qcom,mdss-pan-physical-height-dimension = <236>;
+		oplus,esd-err-flag-check-enabled;
 		qcom,error-flag-gpio = <&tlmm 46 0>;
 		qcom,error-flag-gpio-slave = <&tlmm 58 0>;
 		qcom,config-select = <&dsi_nt36523_panel_vid_config0>;

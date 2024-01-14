@@ -74,6 +74,12 @@ config TOUCHPANEL_ILITEK
 	---help---
 	say Y to enable driver for Touchpanel using ilitek IC
 
+config TOUCHPANEL_CHIPONE
+#	default y
+	bool "TP chipone IC enable or not for OPLUS"
+	---help---
+	say Y to enable driver for Touchpanel using chipone IC
+
 source "drivers/input/touchscreen/oplus_touchscreen/util_interface/Kconfig"
 
 if TOUCHPANEL_SYNAPTICS

@@ -56,6 +56,9 @@
 		health_monitor_v2_support;
 		high_resolution_support;
 		lcd_tp_refresh_support;
+		exception_upload_support;
+		black_gesture_indep_support;
+		sportify_aod_gesture_support;
 		/*
 		 *Virtual Key Config:
 		 *1:touchpanel,button-type: <virtualkey_type  supportted_button-map>

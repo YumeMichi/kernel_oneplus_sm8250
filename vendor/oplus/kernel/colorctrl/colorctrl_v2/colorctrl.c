@@ -1365,7 +1365,6 @@ static ssize_t proc_colorctrl_main_parameter_write(struct file *file, const char
 		COLOR_INFO("%s:count > %d\n", PAGESIZE);
 		return count;
 	}
-	buf[strlen(buf)] = '\0';
 	color_para = cd->color_control_para;
 	transparent_para = cd->transparent_control_para;
 	value_cnt = colorctrl_str_parse(buf, name, NAME_TAG_SIZE, split_value, MAX_PARAMETER);
@@ -1518,14 +1517,14 @@ static ssize_t proc_ageing_para_read(struct file *file, char __user *user_buf, s
 	str = kzalloc(MAX_AGING_VOL_DATA, GFP_KERNEL);
 	if (IS_ERR(str) || str == NULL) {
 		COLOR_INFO("str is null or err\n");
-		kfree(str);
+		/*kfree(str);*/
 		goto OUT;
 	}
 
 	fp = filp_open(AGING_VOL_PATH, O_RDWR | O_CREAT, EC_CHMOD);
 	if(IS_ERR(fp)) {
 		COLOR_INFO("Can not open file %s\n", AGING_VOL_PATH);
-		filp_close(fp, NULL);
+		/*filp_close(fp, NULL);*/
 		kfree(str);
 		goto OUT;
 	}
@@ -1600,7 +1599,7 @@ static ssize_t proc_ageing_para_write(struct file *file, const char __user *buff
 
 	str = kzalloc(MAX_AGING_VOL_DATA, GFP_KERNEL);
 	if (IS_ERR(str) || str == NULL) {
-		kfree(str);
+		/*kfree(str);*/
 		goto OUT;
 	}
 
@@ -1610,7 +1609,7 @@ static ssize_t proc_ageing_para_write(struct file *file, const char __user *buff
 	if(IS_ERR(fp)) {
 		COLOR_INFO("Can not open file %s\n", AGING_VOL_PATH);
 		kfree(str);
-		filp_close(fp, NULL);
+		/*filp_close(fp, NULL);*/
 		goto OUT;
 	}
 
@@ -1648,7 +1647,7 @@ static ssize_t proc_ec_debug_level_read(struct file *file, char __user *user_buf
 	ssize_t ret = 0;
 
 	COLOR_DEBUG(" ec_debug is %d \n", ec_debug);
-	snprintf(page, PAGESIZE - 1, "%d", ec_debug);
+	snprintf(page, PAGESIZE - 1, "%u", ec_debug);
 	ret = simple_read_from_buffer(user_buf, count, ppos, page, sizeof(page));
 	return ret;
 }

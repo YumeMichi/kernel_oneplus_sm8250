@@ -10,6 +10,9 @@
 #endif
 
 atomic_long_t ion_total_size;
+#ifdef CONFIG_OPLUS_ION_BOOSTPOOL
+atomic_long_t boost_pool_pages = ATOMIC64_INIT(0);
+#endif
 bool ion_cnt_enable = true;
 
 unsigned long ion_total(void)

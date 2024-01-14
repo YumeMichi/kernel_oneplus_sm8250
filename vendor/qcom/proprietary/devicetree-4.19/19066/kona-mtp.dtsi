@@ -229,7 +229,9 @@
 		oplus,override1_en_value = <0x1>;
 	};
 	//#endif //VENDOR_EDIT
-
+	sensor_fb {
+		compatible = "oplus,sensor-feedback";
+	};
 	//#ifdef OPLUS_FEATURE_SENSOR_SMEM
 	/*enum sensor_id { ACCEL,GYRO,MAG,LIGHT,PROXIMITY,SAR,CT,BAROMETER,SENSORS_NUM};*/
 	oplus_sensor {
@@ -498,6 +500,8 @@
 		health_monitor_v2_support;
 		//ear_sense_support;
 		black_gesture_support;
+		black_gesture_indep_support;
+		sportify_aod_gesture_support;
 		//fw_edge_limit_support;
 		charger_pump_support;
 		//spurious_fingerprint_support;
@@ -1539,6 +1543,8 @@
 			qcom,lpd-disable;
 
 			qcom,skip_usbtemp_cool_down;
+
+			oplus,aging_ffc_version = <1>;
 
 			//for PD9V or QC9V
 			qcom,vbatt_pdqc_to_5v_thr = <4180>;

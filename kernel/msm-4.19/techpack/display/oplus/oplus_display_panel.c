@@ -89,12 +89,16 @@ static const struct panel_ioctl_desc panel_ioctls[] = {
 	PANEL_IOCTL_DEF(PANEL_IOCTL_GET_DITHER_STATUS, oplus_display_get_dither_status),
 	PANEL_IOCTL_DEF(PANEL_IOCTL_SET_FP_PRESS, oplus_display_panel_notify_fp_press),
 	PANEL_IOCTL_DEF(PANEL_IOCTL_SET_CABC_STATUS, oplus_display_panel_set_cabc),
+	PANEL_IOCTL_DEF(PANEL_IOCTL_GET_PANEL_NAME, oplus_display_panel_get_panel_name),
+	PANEL_IOCTL_DEF(PANEL_IOCTL_GET_PANEL_BPP, oplus_display_panel_get_panel_bpp),
 	PANEL_IOCTL_DEF(PANEL_IOCTL_GET_CABC_STATUS, oplus_display_panel_get_cabc),
 	#ifdef OPLUS_FEATURE_AOD_RAMLESS
 	PANEL_IOCTL_DEF(PANEL_IOCTL_SET_AOD_AREA, oplus_ramless_panel_set_aod_area),
 	#endif /* OPLUS_FEATURE_AOD_RAMLESS */
 	PANEL_IOCTL_DEF(PANEL_IOCTL_SET_FP_TYPE, oplus_ofp_set_fp_type),
 	PANEL_IOCTL_DEF(PANEL_IOCTL_GET_FP_TYPE, oplus_ofp_get_fp_type),
+	/* Apollo DC backlight */
+	PANEL_IOCTL_DEF(PANEL_IOCTL_SET_DC_REAL_BACKLIGHT, oplus_display_panel_set_dc_real_brightness),
 };
 
 int oplus_display_fix_apollo_level(void)
@@ -112,8 +116,8 @@ int oplus_display_fix_apollo_level(void)
 			p_apollo_backlight->apollo_bl_list += sizeof(unsigned int)/sizeof(unsigned short);
 			p_apollo_backlight->panel_bl_list = p_apollo_backlight->apollo_bl_list + APOLLO_BL_4096;
 			p_apollo_backlight->bl_fix = true;
-		} else if(apollo_id[0] == APOLLO_BL_8192) {
-			p_apollo_backlight->bl_id_lens= APOLLO_BL_8192;
+		} else if (apollo_id[0] == APOLLO_BL_8192) {
+			p_apollo_backlight->bl_id_lens = APOLLO_BL_8192;
 			p_apollo_backlight->apollo_bl_list += sizeof(unsigned int)/sizeof(unsigned short);
 			p_apollo_backlight->panel_bl_list = p_apollo_backlight->apollo_bl_list + APOLLO_BL_8192;
 			p_apollo_backlight->bl_fix = true;
@@ -230,7 +234,7 @@ static int oplus_export_dmabuf(int buf_size)
 	int retcode = 0;
 	DEFINE_DMA_BUF_EXPORT_INFO(oplus_exp_info);
 	struct dma_buf *dmabuf = NULL;
-	unsigned long vaddr; //alloc by kzalloc for dma map
+	unsigned long vaddr; /* alloc by kzalloc for dma map */
 	char *bl_addr = NULL;
 	int page_order = 0;
 
@@ -256,10 +260,10 @@ static int oplus_export_dmabuf(int buf_size)
 		pr_err("%s alloc_pages fail\n", __func__);
 		goto err_dmabuf;
 	}
-	//just for test
+	/* just for testi */
 	bl_addr = (char *)vaddr;
 	sprintf(bl_addr, "dma test!");
-	// just for test
+	/* just for test */
 
 	oplus_exp_info.ops = &oplus_dmabuf_ops;
 	oplus_exp_info.size = page_order*PAGE_SIZE;
@@ -280,7 +284,7 @@ static int oplus_export_dmabuf(int buf_size)
 	p_apollo_backlight->panel_bl_list = (unsigned short *)(vaddr)
 		+ APOLLO_BACKLIGHT_LENS/sizeof(unsigned int);
 	p_apollo_backlight->bl_index_last = -1;
-	p_apollo_backlight->bl_level_last = -125; //number for bl init level
+	p_apollo_backlight->bl_level_last = -125; /* number for bl init leveli */
 	pr_debug("%s buf_size = %d bytes, p_panel_backlight = %p, vaddr = %p\n",
 		__func__, p_apollo_backlight->buf_size, p_apollo_backlight->panel_bl_list,
 		p_apollo_backlight->vaddr);

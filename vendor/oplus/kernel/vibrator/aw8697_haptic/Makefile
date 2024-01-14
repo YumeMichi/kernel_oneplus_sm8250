@@ -2,6 +2,8 @@
 #ifdef OPLUS_FEATURE_CHG_BASIC
 ifeq ($(strip $(BRAND_SHOW_FLAG)), oneplus)
 	ccflags-y += -DCONFIG_OPLUS_HAPTIC_OOS
+else ifeq ($(strip $(CONFIG_CHG_FOR_OP9_PRO)), y)
+	ccflags-y += -DCONFIG_OPLUS_HAPTIC_OOS
 else ifeq ($(strip $(CONFIG_OPLUS_CHG_OOS)), y)
 	ccflags-y += -DCONFIG_OPLUS_HAPTIC_OOS
 endif

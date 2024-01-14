@@ -9990,15 +9990,20 @@ int voice_get_cvp_param(void)
 			apr_cvp = common.apr_q6_cvp;
 			if (!apr_cvp) {
 				pr_err("%s: apr_cvp is NULL\n", __func__);
-				return -EINVAL;
+				/* release common_lock when return. */
+				ret = -EINVAL;
+				goto done;
 			}
 			pr_info("%s: active voice session = %d\n", __func__, v->session_id);
 
 			pkt_size = sizeof(struct vss_icommon_cmd_get_param);
 
 			get_param = kzalloc(pkt_size, GFP_KERNEL);
-			if (!get_param)
-				return -ENOMEM;
+			if (!get_param) {
+				/* release common_lock when return. */
+				ret = -ENOMEM;
+				goto done;
+			}
 
 			pr_info("%s: pkt_size = %d\n", __func__, pkt_size);
 

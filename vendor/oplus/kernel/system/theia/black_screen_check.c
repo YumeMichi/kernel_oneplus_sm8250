@@ -8,7 +8,7 @@
 
 #define BLACKSCREEN_COUNT_FILE    "/data/oplus/log/bsp/blackscreen_count.txt"
 #define BLACK_MAX_WRITE_NUMBER            50
-#define BLACK_SLOW_STATUS_TIMEOUT_MS    20000
+#define BLACK_SLOW_STATUS_TIMEOUT_MS    5000
 
 #define BLACK_DEBUG_PRINTK(a, arg...)\
     do{\
@@ -40,6 +40,13 @@ int black_screen_timer_restart(void)
         BLACK_DEBUG_PRINTK("black_screen_timer_restart:g_black_data.status = %d return\n",g_black_data.status);
         return g_black_data.status;
     }
+
+	/* Remove for MTK functioning */
+	if (!is_system_boot_completed()) {
+		BLACK_DEBUG_PRINTK("boot not complete, %s just return\n", __func__);
+		/* return -1; */
+	}
+
 #ifdef CONFIG_DRM_MSM
     if(g_black_data.blank == MSM_DRM_BLANK_POWERDOWN)
 #else
@@ -97,41 +104,15 @@ static void get_blackscreen_check_dcs_logmap(char* logmap)
         g_black_data.error_id, g_black_data.error_count, get_systemserver_pid(), stages, get_log_swich() ? "true" : "false");
 }
 
-//if the error id contain current pid, we think is a normal resume
-static bool is_normal_resume()
-{
-	char current_pid_str[32];
-	sprintf(current_pid_str, "%d", get_systemserver_pid());
-	if (!strncmp(g_black_data.error_id, current_pid_str, strlen(current_pid_str))) {
-		return true;
-	}
-
-    return false;
-}
-
-static void get_blackscreen_resume_dcs_logmap(char* logmap)
-{
-	snprintf(logmap, 512, "logmap{logType:%s;error_id:%s;resume_count:%u;normalReborn:%s;catchlog:false}", PWKKEY_BLACK_SCREEN_DCS_LOGTYPE,
-        g_black_data.error_id, g_black_data.error_count, (is_normal_resume() ? "true" : "false"));
-}
-
 void send_black_screen_dcs_msg(void)
 {
     char logmap[512] = {0};
 
-	BLACK_DEBUG_PRINTK("send_black_screen_dcs_msg\n");
+    BLACK_DEBUG_PRINTK("send_black_screen_dcs_msg\n");
     get_blackscreen_check_dcs_logmap(logmap);
-    SendDcsTheiaKevent(PWKKEY_DCS_TAG, PWKKEY_DCS_EVENTID, logmap);
-}
 
-static void send_black_screen_resume_dcs_msg(void)
-{
-    //check the current systemserver pid and the error_id, judge if it is a normal resume or reboot resume
-    char resume_logmap[512] = {0};
-
-    BLACK_DEBUG_PRINTK("send_black_screen_resume_dcs_msg\n");
-    get_blackscreen_resume_dcs_logmap(resume_logmap);
-    SendDcsTheiaKevent(PWKKEY_DCS_TAG, PWKKEY_DCS_EVENTID, resume_logmap);
+    theia_send_event(THEIA_EVENT_BLACK_SCREEN_HANG, THEIA_LOGINFO_KERNEL_LOG | THEIA_LOGINFO_ANDROID_LOG,
+            current->pid, logmap);
 }
 
 static void delete_timer(char* reason, bool cancel)
@@ -140,7 +121,6 @@ static void delete_timer(char* reason, bool cancel)
     del_timer(&g_black_data.timer);
 
     if (cancel && g_black_data.error_count != 0) {
-        send_black_screen_resume_dcs_msg();
         g_black_data.error_count = 0;
         sprintf(g_black_data.error_id, "%s", "null");
     }

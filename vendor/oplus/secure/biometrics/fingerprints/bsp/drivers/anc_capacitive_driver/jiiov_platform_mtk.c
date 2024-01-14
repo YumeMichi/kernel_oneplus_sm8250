@@ -1342,7 +1342,7 @@ struct spi_driver spi_driver = {.driver =
 
 static int __init ancfp_init(void) {
     int rc = 0;
-    if (FP_JIIOV_0101 != (rc = get_fpsensor_type())) {
+    if (FP_JIIOV_0101 != get_fpsensor_type()) {
         pr_err("%s, found not jiiov sensor rc:%d\n", __func__, rc);
         rc = -EINVAL;
         return rc;
