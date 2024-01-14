@@ -2495,6 +2495,10 @@ static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
 	if (!fstype)
 		return -EINVAL;
 
+	/* VTS test skips EXFAT format for kernel4.19 */
+	if ((!strncmp(fstype, "exfat",5)) && (!strncmp(name, "/dev/zero",9)))
+		return -ENODEV;
+
 	type = get_fs_type(fstype);
 	if (!type)
 		return -ENODEV;

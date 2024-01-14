@@ -21,6 +21,7 @@
 #include <linux/pkeys.h>
 #include <linux/mm_inline.h>
 #include <linux/ctype.h>
+#include <linux/sched/signal.h>
 
 #include <asm/elf.h>
 #include <asm/tlb.h>
@@ -1997,6 +1998,10 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 					min(vma->vm_end, end),
 					&reclaim_walk);
 			vma = vma->vm_next;
+
+			if (unlikely(signal_pending(current) &&
+				sigismember(&current->pending.signal, SIGUSR2)))
+				break;
 		}
 	} else {
 		for (vma = mm->mmap; vma; vma = vma->vm_next) {
@@ -2012,6 +2017,10 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 			rp.vma = vma;
 			walk_page_range(vma->vm_start, vma->vm_end,
 				&reclaim_walk);
+
+			if (unlikely(signal_pending(current) &&
+				sigismember(&current->pending.signal, SIGUSR2)))
+				break;
 		}
 	}
 

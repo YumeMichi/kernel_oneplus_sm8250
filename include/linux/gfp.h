@@ -583,6 +583,7 @@ extern void __free_pages(struct page *page, unsigned int order);
 extern void free_pages(unsigned long addr, unsigned int order);
 extern void free_unref_page(struct page *page);
 extern void free_unref_page_list(struct list_head *list);
+extern bool free_unref_page_prepare2(struct page *page,unsigned int order, unsigned long pfn);
 
 struct page_frag_cache;
 extern void __page_frag_cache_drain(struct page *page, unsigned int count);

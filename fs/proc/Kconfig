@@ -105,8 +105,11 @@ config PROC_UID
 	Provides aggregated per-uid information under /proc/uid.
 
 #ifdef OPLUS_FEATURE_CPU_JANKINFO
-source "fs/proc/cpu_jankinfo/Kconfig"
+source "fs/proc/sched_info/Kconfig"
 #endif /* OPLUS_FEATURE_CPU_JANKINFO */
+#ifdef OPLUS_FEATURE_TASK_CPUSTATS
+source "fs/proc/task_cpustats/Kconfig"
+#endif /* OPLUS_FEATURE_TASK_CPUSTATS */
 
 #ifdef OPLUS_FEATURE_HEALTHINFO
 source fs/proc/healthinfo/Kconfig

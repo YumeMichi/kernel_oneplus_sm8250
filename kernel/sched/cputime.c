@@ -5,11 +5,15 @@
 #include "sched.h"
 #include "walt.h"
 #ifdef OPLUS_FEATURE_TASK_CPUSTATS
-/* stat cpu usage on each tick. */
+#ifdef CONFIG_OPLUS_CTP
 #include <linux/task_cpustats.h>
 #endif
+#ifdef CONFIG_OPLUS_SCHED
+#include <linux/task_sched_info.h>
+#endif
+#endif
 #if IS_ENABLED(CONFIG_OPLUS_FEATURE_CPU_JANKINFO)
-#include <linux/cpu_jankinfo/jank_cpuload.h>
+#include <linux/sched_info/osi_cpuload.h>
 #endif
 
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
@@ -525,6 +529,13 @@ void account_process_tick(struct task_struct *p, int user_tick)
 {
 	u64 cputime, steal;
 	struct rq *rq = this_rq();
+
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+	if (ctp_send_message) {
+		sched_action_trig();
+		ctp_send_message = false;
+	}
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 
 	if (vtime_accounting_cpu_enabled())
 		return;

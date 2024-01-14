@@ -969,107 +969,105 @@ static unsigned long damos_wmark_wait_us(struct damos *scheme)
 	unsigned long diff;
 	struct sysinfo i;
 
-	switch (wmarks_metric) {
-	case DAMOS_WMARK_NONE:
-		break;
+	switch (wmarks_metric)
+	{
+		case DAMOS_WMARK_NONE:
+			break;
 
-	case DAMOS_WMARK_FREE_MEM_RATE:
-	    si_meminfo(&i);
-		metric = i.freeram * 1000 / i.totalram;
-		/* higher than high watermark or lower than low watermark */
-		if (metric > scheme->wmarks.high || scheme->wmarks.low > metric) {
-			if (scheme->wmarks.activated)
-				pr_debug("deactivate a scheme (%d) for %s wmark\n",
-						scheme->action,
-						metric > scheme->wmarks.high ?
-						"high" : "low");
-			scheme->wmarks.activated = false;
-			return scheme->wmarks.interval;
-		}
-
-		/* inactive and higher than middle watermark */
-		if ((scheme->wmarks.high >= metric && metric >= scheme->wmarks.mid) &&
-				!scheme->wmarks.activated)
-			return scheme->wmarks.interval;
-
-		if (!scheme->wmarks.activated)
-			pr_debug("activate a scheme (%d)\n", scheme->action);
-		scheme->wmarks.activated = true;
-		return 0;
-
-	case DAMOS_WMARK_OPLUS:
-		si_meminfo(&i);
-		metric = i.freeram * 1000 / i.totalram;
-		diff   = abs(last_metric - metric);
-
-		if (scheme->wmarks.activated) {
-			if (metric < 10) {
+		case DAMOS_WMARK_FREE_MEM_RATE:/* this case don't need break */
+		    si_meminfo(&i);
+			metric = i.freeram * 1000 / i.totalram;
+			/* higher than high watermark or lower than low watermark */
+		    if (metric > scheme->wmarks.high || scheme->wmarks.low > metric) {
+				if (scheme->wmarks.activated)
+					pr_debug("deactivate a scheme (%d) for %s wmark\n",
+							scheme->action,
+							metric > scheme->wmarks.high ?
+							"high" : "low");
 				scheme->wmarks.activated = false;
-				nr_reclaim_time = 0;
-				nr_reclaim_page = 0;
-				printk("[damon_reclaim] sleep. need kswapd.\n");
 				return scheme->wmarks.interval;
 			}
-			nr_reclaim_time = active_interval * active_cnt; // 10ms(0.01s) * cnt;
-		}
 
-		// printk("[damon_reclaim] last: %d now: %d diff: %d activated: %d nr_reclaim_time: %d pages: %d \n",
-		// 		last_metric, metric, diff, scheme->wmarks.activated, nr_reclaim_time, nr_reclaim_page);
+			/* inactive and higher than middle watermark */
+			if ((scheme->wmarks.high >= metric && metric >= scheme->wmarks.mid) &&
+					!scheme->wmarks.activated)
+				return scheme->wmarks.interval;
 
-		last_metric = (2*last_metric + 8*metric)/10; // smooth filter
-		/*
-		Total RAM     Activate FreeMem
-		-------------------------------
-			 4 GB               80 MB
-			 6 GB              120 MB
-			 8 GB              160 MB
-			12 GB              240 MB
-			16 GB              320 MB
-		*/
-		if (diff <= 20 || last_metric < metric) {
+			if (!scheme->wmarks.activated)
+				pr_debug("activate a scheme (%d)\n", scheme->action);
+			scheme->wmarks.activated = true;
+			return 0;
+
+		case DAMOS_WMARK_OPLUS:/* this case don't need break */
+			si_meminfo(&i);
+			metric = i.freeram * 1000 / i.totalram;
+			diff   = abs(last_metric - metric);
 
 			if (scheme->wmarks.activated) {
-				if (nr_reclaim_time >= 300000 ||  // time thresold: 5min = 5*60*1000 ms
-					nr_reclaim_page >= i.totalram * 20 / 1000 )
-				{
+				if (metric < 10) {
 					scheme->wmarks.activated = false;
 					nr_reclaim_time = 0;
 					nr_reclaim_page = 0;
-					printk("[damon_reclaim] sleep. need to control quota.\n");
+					printk("[damon_reclaim] sleep. need kswapd.\n");
 					return scheme->wmarks.interval;
+				}
+				nr_reclaim_time = active_interval * active_cnt; // 10ms(0.01s) * cnt;
+			}
+
+			last_metric = (2*last_metric + 8*metric)/10; // smooth filter
+			/*
+			Total RAM     Activate FreeMem
+			-------------------------------
+				 4 GB               80 MB
+				 6 GB              120 MB
+				 8 GB              160 MB
+				12 GB              240 MB
+				16 GB              320 MB
+			*/
+			if (diff <= 20 || last_metric < metric) {
+
+				if (scheme->wmarks.activated) {
+					if (nr_reclaim_time >= 300000 ||  // time thresold: 5min = 5*60*1000 ms
+						nr_reclaim_page >= i.totalram * 20 / 1000 )
+					{
+						scheme->wmarks.activated = false;
+						nr_reclaim_time = 0;
+						nr_reclaim_page = 0;
+						printk("[damon_reclaim] sleep. need to control quota.\n");
+						return scheme->wmarks.interval;
+					} else {
+						++active_cnt;
+						return 0;
+					}
 				} else {
-					++active_cnt;
+					// nothing
+					return scheme->wmarks.interval;
+				}
+			}
+			else {
+				if (scheme->wmarks.activated) {
+					//nothing
+					return 0;
+				} else {
+					active_cnt = 0;
+					scheme->wmarks.activated = true;
+					nr_reclaim_time = 0;
+					nr_reclaim_page = 0;
+					printk("[damon_reclaim] active. \n");
+					kdamond_usleep(scheme->wmarks.interval);
 					return 0;
 				}
-			} else {
-				// nothing
-				return scheme->wmarks.interval;
 			}
-		}
-		else {
-			if (scheme->wmarks.activated) {
-				//nothing
-				return 0;
-			} else {
-				active_cnt = 0;
-				scheme->wmarks.activated = true;
-				nr_reclaim_time = 0;
-				nr_reclaim_page = 0;
-				printk("[damon_reclaim] active. \n");
-				kdamond_usleep(scheme->wmarks.interval);
-				return 0;
-			}
-		}
 
-	case DAMOS_WMARK_SLEEP:
-		scheme->wmarks.activated = false;
-		nr_reclaim_time = 0;
-		nr_reclaim_page = 0;
-		printk("[damon_reclaim] sleep. call from upper layer.\n");
-		return scheme->wmarks.interval;
+		case DAMOS_WMARK_SLEEP:/* this case don't need break */
+			scheme->wmarks.activated = false;
+			nr_reclaim_time = 0;
+			nr_reclaim_page = 0;
+			printk("[damon_reclaim] sleep. call from upper layer.\n");
+			return scheme->wmarks.interval;
 
-	default:
-		break;
+		default:
+			break;
 	}
 	return 0;
 }
@@ -1148,7 +1146,7 @@ static int kdamond_fn(void *data)
 			kdamond_split_regions(ctx);
 			if (ctx->ops.reset_aggregated)
 					ctx->ops.reset_aggregated(ctx);
-			ctx->ops.update(ctx);
+
 			sz_limit = damon_region_sz_limit(ctx);
 		}
 	}

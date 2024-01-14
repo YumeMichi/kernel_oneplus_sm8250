@@ -770,10 +770,11 @@ config UCLAMP_BUCKETS_COUNT
 
 #ifdef OPLUS_FEATURE_SCHED_ASSIST
 source "kernel/sched_assist/Kconfig"
-#endif /* OPLUS_FEATURE_SCHED_ASSIST */
-#ifdef OPLUS_FEATURE_INPUT_BOOST_V4
+#ifdef CONFIG_OPLUS_FEATURE_FRAME_BOOST
 source "kernel/tuning/Kconfig"
-#endif /* OPLUS_FEATURE_INPUT_BOOST_V4 */
+source "kernel/uad/Kconfig"
+#endif
+#endif
 
 endmenu
 

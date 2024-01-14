@@ -144,3 +144,13 @@ ifeq ($(OPLUS_FEATURE_MEMLEAK_DETECT), yes)
 obj-$(CONFIG_DUMP_TASKS_MEM) += task_mem/
 endif
 #endif /*defined(OPLUS_FEATURE_MEMLEAK_DETECT)
+
+obj-$(CONFIG_MAPPED_PROTECT) += mapped_protect.o
+obj-$(CONFIG_SHRINK_LRU_TRYLOCK) += reclaim_lessdelay.o
+obj-$(CONFIG_KSHRINK_SLABD) += kshrink_slabd.o
+
+#ifdef OPLUS_FEATURE_PROACTIVE_COMPACT
+obj-$(CONFIG_PROACTIVE_COMPACT) += proactive_compact/
+#endif /* OPLUS_FEATURE_PROACTIVE_COMPACT */
+obj-$(CONFIG_OPLUS_UXMEM_OPT) += ux_page_pool.o
+obj-$(CONFIG_OPLUS_DYNAMIC_READAHEAD) += dynamic_readhead.o

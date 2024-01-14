@@ -3052,5 +3052,8 @@ extern int proc_reclaim_notifier_register(struct notifier_block *nb);
 extern int proc_reclaim_notifier_unregister(struct notifier_block *nb);
 #endif
 
+#ifdef CONFIG_OPLUS_UXMEM_OPT
+extern bool is_critical_zeroslowpath_task(struct task_struct *tsk);
+#endif
 #endif /* __KERNEL__ */
 #endif /* _LINUX_MM_H */

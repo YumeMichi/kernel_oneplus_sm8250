@@ -1128,7 +1128,7 @@ int nfc_ioctl_core_reset_ntf(struct file *filp)
  *
  * Check the NQ Chipset and firmware version details
  */
-unsigned int nfc_ioctl_nfcc_info(struct file *filp, unsigned long arg)
+static unsigned int nfc_ioctl_nfcc_info(struct file *filp, unsigned long arg)
 {
 	unsigned int r = 0;
 	struct nqx_dev *nqx_dev = filp->private_data;

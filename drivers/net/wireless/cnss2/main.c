@@ -2740,7 +2740,7 @@ static ssize_t icnss_show_fw_ready(struct device_driver *driver, char *buf)
            #ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
            //avoid wifi firmware ready check fail when idle shutdown
            cnss_pr_info("firmware_ready: %d; power_on: %d", firmware_ready, plat_env->powered_on);
-           if (!firmware_ready && !plat_env->powered_on && regdbloadsuccess && bdfloadsuccess) {
+           if (!firmware_ready && !plat_env->powered_on && bdfloadsuccess) {
                firmware_ready = true;
            }
            #endif /* OPLUS_FEATURE_WIFI_DCS_SWITCH */

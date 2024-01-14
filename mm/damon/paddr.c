@@ -15,22 +15,6 @@
 #include "../internal.h"
 #include "ops-common.h"
 
-extern unsigned long min_age;
-
-extern unsigned long quota_ms;
-extern unsigned long quota_sz;
-extern unsigned long quota_reset_interval_ms;
-
-extern unsigned long wmarks_interval;
-extern unsigned long wmarks_high;
-extern unsigned long wmarks_mid;
-extern unsigned long wmarks_low;
-
-extern unsigned long sample_interval;
-extern unsigned long aggr_interval;
-extern unsigned long min_nr_regions;
-extern unsigned long max_nr_regions;
-
 extern unsigned long nr_reclaim_page;
 
 static bool __damon_pa_mkold(struct page *page, struct vm_area_struct *vma,
@@ -247,12 +231,11 @@ static unsigned long damon_pa_apply_scheme(struct damon_ctx *ctx,
 			put_page(page);
 			continue;
 		}
-		if (PageUnevictable(page)) {
+		if (PageUnevictable(page))
 			putback_lru_page(page);
-		} else {
+		else
 			list_add(&page->lru, &page_list);
-			put_page(page);
-		}
+		put_page(page);
 	}
 	applied = reclaim_pages(&page_list);
 	cond_resched();
@@ -275,33 +258,12 @@ static int damon_pa_scheme_score(struct damon_ctx *context,
 	return DAMOS_MAX_SCORE;
 }
 
-static void damon_update_param(struct damon_ctx *ctx)
-{
-	struct damos *s;
-	damon_for_each_scheme(s, ctx) {
-		s->min_age_region = min_age / aggr_interval;
-
-		s->quota.ms = quota_ms;
-		s->quota.sz = quota_sz;
-		s->quota.reset_interval = quota_reset_interval_ms;
-
-		s->wmarks.interval = wmarks_interval;
-		s->wmarks.high = wmarks_high;
-		s->wmarks.mid = wmarks_mid;
-		s->wmarks.low = wmarks_low;
-	}
-	ctx->sample_interval = sample_interval;
-	ctx->aggr_interval = aggr_interval;
-	ctx->min_nr_regions = min_nr_regions;
-	ctx->max_nr_regions = max_nr_regions;
-}
-
 static int __init damon_pa_initcall(void)
 {
 	struct damon_operations ops = {
 		.id = DAMON_OPS_PADDR,
 		.init = NULL,
-		.update = damon_update_param,
+		.update = NULL,
 		.prepare_access_checks = damon_pa_prepare_access_checks,
 		.check_accesses = damon_pa_check_accesses,
 		.reset_aggregated = NULL,

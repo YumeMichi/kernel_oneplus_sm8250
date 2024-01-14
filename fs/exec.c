@@ -1260,6 +1260,10 @@ EXPORT_SYMBOL_GPL(__get_task_comm);
 #ifdef OPLUS_FEATURE_SCHED_ASSIST
 extern void sched_assist_target_comm(struct task_struct *task);
 #endif /* OPLUS_FEATURE_SCHED_ASSIST */
+
+#ifdef CONFIG_LOCKING_PROTECT
+extern void sched_locking_target_comm(struct task_struct *p);
+#endif
 void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
 {
 	task_lock(tsk);
@@ -1274,6 +1278,9 @@ void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
 #ifdef CONFIG_OPLUS_FEATURE_TPP
 	tpp_tagging(tsk);
 #endif /* CONFIG_OPLUS_FEATURE_TPP */
+#ifdef CONFIG_LOCKING_PROTECT
+	sched_locking_target_comm(tsk);
+#endif
 	task_unlock(tsk);
 	perf_event_comm(tsk, exec);
 }
@@ -1840,6 +1847,9 @@ static int __do_execve_file(int fd, struct filename *filename,
 		goto out_unmark;
 
 	bprm->argc = count(argv, MAX_ARG_STRINGS);
+	if (bprm->argc == 0)
+		pr_warn_once("process '%s' launched '%s' with NULL argv: empty string added\n",
+			     current->comm, bprm->filename);
 	if ((retval = bprm->argc) < 0)
 		goto out;
 
@@ -1863,6 +1873,20 @@ static int __do_execve_file(int fd, struct filename *filename,
 	retval = copy_strings(bprm->argc, argv, bprm);
 	if (retval < 0)
 		goto out;
+
+	/*
+	 * When argv is empty, add an empty string ("") as argv[0] to
+	 * ensure confused userspace programs that start processing
+	 * from argv[1] won't end up walking envp. See also
+	 * bprm_stack_limits().
+	 */
+	if (bprm->argc == 0) {
+		const char *argv[] = { "", NULL };
+		retval = copy_strings_kernel(1, argv, bprm);
+		if (retval < 0)
+			goto out;
+		bprm->argc = 1;
+	}
 
 	retval = exec_binprm(bprm);
 	if (retval < 0)

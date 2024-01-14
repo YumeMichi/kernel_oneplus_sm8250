@@ -55,9 +55,10 @@ struct rw_semaphore {
 	/* count for waiters preempt to queue in wait list */
 	long m_count;
 #endif
-#ifdef OPLUS_FEATURE_SCHED_ASSIST
+#ifdef CONFIG_OPLUS_LOCKING_STRATEGY
 	struct task_struct *ux_dep_task;
-#endif /* OPLUS_FEATURE_SCHED_ASSIST */
+	u64 android_oem_data1[2];
+#endif /* CONFIG_OPLUS_LOCKING_STRATEGY */
 };
 
 /*
@@ -73,9 +74,6 @@ extern struct rw_semaphore *rwsem_down_write_failed_killable(struct rw_semaphore
 extern struct rw_semaphore *rwsem_wake(struct rw_semaphore *);
 extern struct rw_semaphore *rwsem_downgrade_wake(struct rw_semaphore *sem);
 
-#ifdef OPLUS_FEATURE_SCHED_ASSIST
-#include <linux/sched_assist/sched_assist_rwsem.h>
-#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 
 /* Include the arch specific part */
 #include <asm/rwsem.h>
@@ -98,11 +96,11 @@ static inline int rwsem_is_locked(struct rw_semaphore *sem)
 #endif
 
 #ifdef CONFIG_RWSEM_SPIN_ON_OWNER
-#ifndef OPLUS_FEATURE_SCHED_ASSIST
-#define __RWSEM_OPT_INIT(lockname) , .osq = OSQ_LOCK_UNLOCKED, .owner = NULL
-#else /* OPLUS_FEATURE_SCHED_ASSIST */
+#ifdef CONFIG_OPLUS_LOCKING_STRATEGY
 #define __RWSEM_OPT_INIT(lockname) , .osq = OSQ_LOCK_UNLOCKED, .owner = NULL, .ux_dep_task = NULL
-#endif /* OPLUS_FEATURE_SCHED_ASSIST */
+#else /* CONFIG_OPLUS_LOCKING_STRATEGY */
+#define __RWSEM_OPT_INIT(lockname) , .osq = OSQ_LOCK_UNLOCKED, .owner = NULL
+#endif /* CONFIG_OPLUS_LOCKING_STRATEGY */
 #else
 #define __RWSEM_OPT_INIT(lockname)
 #endif

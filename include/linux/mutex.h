@@ -63,9 +63,10 @@ struct mutex {
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 	struct lockdep_map	dep_map;
 #endif
-#ifdef OPLUS_FEATURE_SCHED_ASSIST
+#ifdef CONFIG_OPLUS_LOCKING_STRATEGY
 	struct task_struct *ux_dep_task;
-#endif /* OPLUS_FEATURE_SCHED_ASSIST */
+	u64 android_oem_data1[2];
+#endif /* CONFIG_OPLUS_LOCKING_STRATEGY */
 };
 
 /*
@@ -90,10 +91,6 @@ struct mutex_waiter {
 	void			*magic;
 #endif
 };
-
-#ifdef OPLUS_FEATURE_SCHED_ASSIST
-#include <linux/sched_assist/sched_assist_mutex.h>
-#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 
 #ifdef CONFIG_DEBUG_MUTEXES
 
@@ -132,14 +129,7 @@ do {									\
 # define __DEP_MAP_MUTEX_INITIALIZER(lockname)
 #endif
 
-#ifndef OPLUS_FEATURE_SCHED_ASSIST
-#define __MUTEX_INITIALIZER(lockname) \
-		{ .owner = ATOMIC_LONG_INIT(0) \
-		, .wait_lock = __SPIN_LOCK_UNLOCKED(lockname.wait_lock) \
-		, .wait_list = LIST_HEAD_INIT(lockname.wait_list) \
-		__DEBUG_MUTEX_INITIALIZER(lockname) \
-		__DEP_MAP_MUTEX_INITIALIZER(lockname) }
-#else /* OPLUS_FEATURE_SCHED_ASSIST */
+#ifdef CONFIG_OPLUS_LOCKING_STRATEGY
 #define __MUTEX_INITIALIZER(lockname) \
 		{ .owner = ATOMIC_LONG_INIT(0) \
 		, .wait_lock = __SPIN_LOCK_UNLOCKED(lockname.wait_lock) \
@@ -147,7 +137,14 @@ do {									\
 		, .ux_dep_task = NULL \
 		__DEBUG_MUTEX_INITIALIZER(lockname) \
 		__DEP_MAP_MUTEX_INITIALIZER(lockname) }
-#endif /* OPLUS_FEATURE_SCHED_ASSIST */
+#else
+#define __MUTEX_INITIALIZER(lockname) \
+		{ .owner = ATOMIC_LONG_INIT(0) \
+		, .wait_lock = __SPIN_LOCK_UNLOCKED(lockname.wait_lock) \
+		, .wait_list = LIST_HEAD_INIT(lockname.wait_list) \
+		__DEBUG_MUTEX_INITIALIZER(lockname) \
+		__DEP_MAP_MUTEX_INITIALIZER(lockname) }
+#endif
 #define DEFINE_MUTEX(mutexname) \
 	struct mutex mutexname = __MUTEX_INITIALIZER(mutexname)
 

@@ -119,10 +119,6 @@
 #include <linux/im/im.h>
 #endif
 
-#ifdef CONFIG_OPLUS_FEATURE_INPUT_BOOST_V4
-#include <linux/tuning/frame_init.h>
-#endif /* CONFIG_OPLUS_FEATURE_INPUT_BOOST_V4 */
-
 /*
  * Minimum number of threads to boot the kernel
  */
@@ -921,10 +917,12 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 #endif
 
 	/*
-	 * One for us, one for whoever does the "release_task()" (usually
-	 * parent)
+	 * One for the user space visible state that goes away when reaped.
+	 * One for the scheduler.
 	 */
-	atomic_set(&tsk->usage, 2);
+	refcount_set(&tsk->rcu_users, 2);
+	/* One for the rcu users */
+	atomic_set(&tsk->usage, 1);
 #ifdef CONFIG_BLK_DEV_IO_TRACE
 	tsk->btrace_seq = 0;
 #endif
@@ -947,6 +945,10 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 
 #ifdef CONFIG_MEMCG
 	tsk->active_memcg = NULL;
+#endif
+
+#ifdef CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG
+	tsk->abnormal_flag = 0;
 #endif
 
 #ifdef CONFIG_OPLUS_FEATURE_TPD
@@ -2090,9 +2092,10 @@ static __latent_entropy struct task_struct *copy_process(
 #endif
 #endif /* OPLUS_FEATURE_HEALTHINFO */
 
-#ifdef CONFIG_OPLUS_FEATURE_INPUT_BOOST_V4
-	init_task_frame(p);
-#endif
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+	p->wake_tid = 0;
+	p->running_start_time = 0;
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 
 	/* Perform scheduler related setup. Assign this task to a CPU. */
 	retval = sched_fork(clone_flags, p);

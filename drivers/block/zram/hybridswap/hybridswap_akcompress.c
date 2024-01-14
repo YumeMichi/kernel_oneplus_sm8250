@@ -64,7 +64,7 @@ out:
 	spin_unlock(&cache->lock);
 }
 
-static inline struct page * fetch_free_page(void)
+static inline struct page * get_free_page(void)
 {
 	struct page *page = NULL;
 
@@ -90,7 +90,7 @@ void put_free_page(struct page *page)
 	spin_unlock(&compress_info.free_lock);
 }
 
-static inline struct cgroup_cache_page *find_and_fetch_memcg_cache(int cache_id)
+static inline struct cgroup_cache_page *find_and_get_memcg_cache(int cache_id)
 {
 	struct cgroup_cache_page *cache;
 
@@ -102,7 +102,7 @@ static inline struct cgroup_cache_page *find_and_fetch_memcg_cache(int cache_id)
 
 		return NULL;
 	}
-	fetch_memcg_cache(container_of(cache, memcg_hybs_t, cache));
+	get_memcg_cache(container_of(cache, memcg_hybs_t, cache));
 	spin_unlock(&cached_idr_lock);
 
 	return cache;
@@ -116,14 +116,14 @@ void del_page_from_cache(struct page *page)
 	if (!page)
 		return;
 
-	cache_id = fetch_cache_id(page);
+	cache_id = get_cache_id(page);
 	if (unlikely(cache_id < 0 || cache_id > MEM_CGROUP_ID_MAX)) {
 		hybp(HYB_ERR, "page %p cache_id %d index %u is invalid.\n",
-			page, cache_id, fetch_zram_index(page));
+			page, cache_id, get_zram_index(page));
 		return;
 	}
 
-	cache = find_and_fetch_memcg_cache(cache_id);
+	cache = find_and_get_memcg_cache(cache_id);
 	if (!cache)
 		return;
 
@@ -155,7 +155,7 @@ void put_anon_pages(struct page *page)
 	spin_unlock(&hybs->cache.lock);
 }
 
-static inline bool can_stop_working(struct cgroup_cache_page *cache, int index)
+static inline bool can_stop_working(struct cgroup_cache_page *cache, int idx)
 {
 	spin_lock(&cache->lock);
 	if (unlikely(!list_empty(&cache->head))) {
@@ -178,7 +178,7 @@ static int check_cache_state(struct cgroup_cache_page *cache)
 	}
 	cache->compressing = 1;
 	spin_unlock(&cache->lock);
-	fetch_memcg_cache(container_of(cache, memcg_hybs_t, cache));
+	get_memcg_cache(container_of(cache, memcg_hybs_t, cache));
 	return 1;
 }
 
@@ -207,7 +207,7 @@ void mark_compressing_stop(struct cgroup_cache_page *cache)
 	put_memcg_cache(container_of(cache, memcg_hybs_t, cache));
 }
 
-static inline struct page *fetch_anon_page(struct zram *zram,
+static inline struct page *get_anon_page(struct zram *zram,
 					struct cgroup_cache_page *cache)
 {
 	struct page *page, *prev_page;
@@ -223,7 +223,7 @@ try_again:
 	spin_lock(&cache->lock);
 	if (!list_empty(&cache->head)) {
 		page = lru_to_page(&cache->head);
-		index = fetch_zram_index(page);
+		index = get_zram_index(page);
 	}
 	spin_unlock(&cache->lock);
 
@@ -268,7 +268,7 @@ int add_anon_page2cache(struct zram * zram, u32 index, struct page *page)
 
 	hybs = MEMCGRP_ITEM_DATA(memcg);
 	cache = &hybs->cache;
-	if (find_and_fetch_memcg_cache(cache->id) != cache)
+	if (find_and_get_memcg_cache(cache->id) != cache)
 		return 0;
 
 	spin_lock(&cache->lock);
@@ -278,7 +278,7 @@ int add_anon_page2cache(struct zram * zram, u32 index, struct page *page)
 	}
 	spin_unlock(&cache->lock);
 
-	dst_page = fetch_free_page();
+	dst_page = get_free_page();
 	if (!dst_page)
 		return 0;
 
@@ -310,13 +310,13 @@ static inline void akcompressd_try_to_sleep(wait_queue_head_t *waitq)
 static int akcompressd_func(void *data)
 {
 	struct page *page;
-	int ret, thread_index;
+	int ret, thread_idx;
 	struct list_head compress_fail_list;
 	struct cgroup_cache_page *cache = NULL;
 
-	thread_index = (int)data;
-	if (thread_index < 0 || thread_index >= MAX_AKCOMPRESSD_THREADS) {
-		hybp(HYB_ERR, "akcompress task index %d is invalid.\n", thread_index);
+	thread_idx = (int)data;
+	if (thread_idx < 0 || thread_idx >= MAX_AKCOMPRESSD_THREADS) {
+		hybp(HYB_ERR, "akcompress task idx %d is invalid.\n", thread_idx);
 		return -EINVAL;
 	}
 
@@ -331,7 +331,7 @@ static int akcompressd_func(void *data)
 
 finish_last_jobs:
 		INIT_LIST_HEAD(&compress_fail_list);
-		page = fetch_anon_page(zram_info, cache);
+		page = get_anon_page(zram_info, cache);
 		while (page) {
 			ret = async_compress_page(zram_info, page);
 			put_memcg_cache(container_of(cache, memcg_hybs_t, cache));
@@ -339,18 +339,18 @@ finish_last_jobs:
 			if (ret)
 				list_add(&page->lru, &compress_fail_list);
 			else {
-				atomic64_inc(&akc_cnt[thread_index]);
+				atomic64_inc(&akc_cnt[thread_idx]);
 				page->mem_cgroup = NULL;
 				put_free_page(page);
 			}
-			page = fetch_anon_page(zram_info, cache);
+			page = get_anon_page(zram_info, cache);
 		}
 
 		if (!list_empty(&compress_fail_list))
 			hybp(HYB_ERR, "have some compress failed pages.\n");
 
 		if (kthread_should_stop()) {
-			if (!can_stop_working(cache, thread_index))
+			if (!can_stop_working(cache, thread_idx))
 				goto finish_last_jobs;
 		}
 		mark_compressing_stop(cache);
@@ -362,7 +362,7 @@ finish_last_jobs:
 static int update_akcompressd_threads(int thread_count, struct zram *zram)
 {
         int drop, increase;
-	int last_index, start_index, hid;
+	int last_idx, start_idx, hid;
 	static DEFINE_MUTEX(update_lock);
 
 	if (thread_count < 0 || thread_count > MAX_AKCOMPRESSD_THREADS) {
@@ -379,10 +379,10 @@ static int update_akcompressd_threads(int thread_count, struct zram *zram)
                 return thread_count;
 	}
 
-	last_index = akcompressd_threads - 1;
+	last_idx = akcompressd_threads - 1;
 	if (thread_count < akcompressd_threads) {
 		drop = akcompressd_threads - thread_count;
-		for (hid = last_index; hid > (last_index - drop); hid--) {
+		for (hid = last_idx; hid > (last_idx - drop); hid--) {
 			if (akc_task[hid]) {
 				kthread_stop(akc_task[hid]);
 				akc_task[hid] = NULL;
@@ -390,8 +390,8 @@ static int update_akcompressd_threads(int thread_count, struct zram *zram)
 		}
 	} else {
 		increase = thread_count - akcompressd_threads;
-		start_index = last_index + 1;
-		for (hid = start_index; hid < (start_index + increase); hid++) {
+		start_idx = last_idx + 1;
+		for (hid = start_idx; hid < (start_idx + increase); hid++) {
 			if (unlikely(akc_task[hid]))
 				BUG();
 			akc_task[hid]= kthread_run(akcompressd_func,
@@ -536,13 +536,13 @@ out:
 	mutex_unlock(&akcompress_init_lock);
 }
 
-int akcompress_cache_page_fault(struct zram *zram,
+int akcompress_cache_fault_out(struct zram *zram,
 					struct page *page, u32 index)
 {
 	void *src, *dst;
 
 	if (zram_test_flag(zram, index, ZRAM_CACHED)) {
-		struct page *src_page = (struct page *)zram_fetch_page(zram, index);
+		struct page *src_page = (struct page *)zram_get_page(zram, index);
 
 		src = kmap_atomic(src_page);
 		dst = kmap_atomic(page);
@@ -557,7 +557,7 @@ int akcompress_cache_page_fault(struct zram *zram,
 	}
 
 	if  (zram_test_flag(zram, index, ZRAM_CACHED_COMPRESS)) {
-		struct page *src_page = (struct page *)zram_fetch_page(zram, index);
+		struct page *src_page = (struct page *)zram_get_page(zram, index);
 
 		src = kmap_atomic(src_page);
 		dst = kmap_atomic(page);

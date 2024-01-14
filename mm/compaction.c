@@ -1984,7 +1984,9 @@ static enum compact_result __compact_finished(struct compact_control *cc)
 #if defined(OPLUS_FEATURE_MULTI_FREEAREA) && defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
     }
 #endif
-	if (cc->contended || fatal_signal_pending(current))
+	if (cc->contended || fatal_signal_pending(current) ||
+		(signal_pending(current) &&
+		sigismember(&current->pending.signal, SIGUSR2)))
 		ret = COMPACT_CONTENDED;
 
 	return ret;

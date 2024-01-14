@@ -26,6 +26,12 @@ static inline int is_kernel_rodata(unsigned long addr)
 		addr < (unsigned long)__end_rodata;
 }
 
+#if defined(CONFIG_OPLUS_UXMEM_OPT) && defined(OPLUS_FEATURE_SCHED_ASSIST) \
+		&& defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <linux/sched_assist/sched_assist_common.h>
+#include "ux_page_pool.h"
+#endif /* OPLUS_UXMEM_OPT */
+
 /**
  * kfree_const - conditionally free memory
  * @x: pointer to the memory
@@ -399,6 +405,10 @@ void *kvmalloc_node(size_t size, gfp_t flags, int node)
 {
 	gfp_t kmalloc_flags = flags;
 	void *ret;
+#if defined(CONFIG_OPLUS_UXMEM_OPT) && defined(OPLUS_FEATURE_SCHED_ASSIST) \
+		&& defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	bool is_ux = ux_page_pool_enable ? test_task_ux(current) : false;
+#endif
 
 	/*
 	 * vmalloc uses GFP_KERNEL for some internal allocations (e.g page tables)
@@ -408,7 +418,12 @@ void *kvmalloc_node(size_t size, gfp_t flags, int node)
 		return kmalloc_node(size, flags, node);
 
 	/*do not attempt kmalloc if we need more than KMALLOC_MAX_PAGES pages at once*/
-	if (size >= KMALLOC_MAX_PAGES * PAGE_SIZE)
+	if (size >= KMALLOC_MAX_PAGES * PAGE_SIZE
+#if defined(CONFIG_OPLUS_UXMEM_OPT) && defined(OPLUS_FEATURE_SCHED_ASSIST) \
+		&& defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+				&& !is_ux
+#endif /* OPLUS_UXMEM_OPT */
+			)
 		goto use_vmalloc;
 
 	/*
@@ -424,6 +439,18 @@ void *kvmalloc_node(size_t size, gfp_t flags, int node)
 		if (!(kmalloc_flags & __GFP_RETRY_MAYFAIL))
 			kmalloc_flags |= __GFP_NORETRY;
 	}
+
+#if defined(CONFIG_OPLUS_UXMEM_OPT) && defined(OPLUS_FEATURE_SCHED_ASSIST) \
+		&& defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	/*
+	 *Don't go to direct reclaim,when ux and size > UXMEM_POOL_MAX_PAGES.
+	 *It can get memory freom ux pool when order =< UXMEM_POOL_MAX_PAGES
+	 */
+	if ((size > UXMEM_POOL_MAX_PAGES * PAGE_SIZE) && is_ux) {
+		kmalloc_flags &= ~__GFP_DIRECT_RECLAIM;
+		kmalloc_flags |= __GFP_KSWAPD_RECLAIM;
+	}
+#endif
 
 	ret = kmalloc_node(size, kmalloc_flags, node);
 

@@ -92,6 +92,8 @@ source "init/Kconfig"
 
 source "kernel/Kconfig.freezer"
 
+source "kernel/Kconfig"
+
 source "fs/Kconfig.binfmt"
 
 source "mm/Kconfig"

@@ -167,6 +167,16 @@ static int two_hundred = 200;
 #ifdef OPLUS_FEATURE_EDTASK_IMPROVE
 int sysctl_ed_task_enabled = 1;
 #endif /* OPLUS_FEATURE_EDTASK_IMPROVE */
+#if defined(CONFIG_OPLUS_UXMEM_OPT)
+extern int ux_page_pool_enable;
+extern int ux_page_pool_enable_handler(struct ctl_table *table, int write,
+		void __user *buffer, size_t *length, loff_t *ppos);
+#endif
+
+#if defined(CONFIG_OPLUS_DYNAMIC_READAHEAD)
+extern int dynamic_readahead_enable;
+#endif
+
 static int one_thousand = 1000;
 #if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_UXIO_FIRST)
 unsigned int sysctl_uxio_io_opt = true;
@@ -381,7 +391,82 @@ int sysctl_cpu_util_thresh = 85;
 int sysctl_cpu_multi_thread = 0;
 #endif
 #ifdef OPLUS_FEATURE_SCHED_ASSIST
+#ifdef CONFIG_OPLUS_FEATURE_FRAME_BOOST
+extern unsigned int sysctl_frame_boost_enable;
+extern unsigned int sysctl_frame_boost_debug;
+extern int sysctl_input_boost_enabled;
+int sysctl_slide_boost_enabled;
+
+#define INPUT_BOOST_DURATION 1500000000
+static struct hrtimer ibtimer;
+static int intput_boost_duration;
+static ktime_t ib_last_time;
+
+void enable_input_boost_timer(void)
+{
+	ktime_t ktime;
+
+	ib_last_time = ktime_get();
+	ktime = ktime_set(0, intput_boost_duration);
+
+	hrtimer_start(&ibtimer, ktime, HRTIMER_MODE_REL);
+}
+
+void disable_input_boost_timer(void)
+{
+	hrtimer_cancel(&ibtimer);
+}
+
+enum hrtimer_restart input_boost_timeout(struct hrtimer *timer)
+{
+	ktime_t now, delta;
+
+	now = ktime_get();
+	delta = ktime_sub(now, ib_last_time);
+
+	ib_last_time = now;
+	sysctl_input_boost_enabled = 0;
+
+	return HRTIMER_NORESTART;
+}
+
+static int input_boost_ctrl_handler(struct ctl_table *table, int write, void __user *buffer,
+	size_t *lenp, loff_t *ppos)
+{
+	int result;
+
+	result = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	if (!write)
+		goto out;
+
+	disable_input_boost_timer();
+	enable_input_boost_timer();
+out:
+	return result;
+}
+
+static int slide_boost_ctrl_handler(struct ctl_table *table, int write, void __user *buffer,
+	size_t *lenp, loff_t *ppos)
+{
+	int result;
+
+	result = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	if (!write)
+		goto out;
+
+	if (sysctl_input_boost_enabled && sysctl_slide_boost_enabled) {
+		disable_input_boost_timer();
+		sysctl_input_boost_enabled = 0;
+	}
+
+out:
+	return result;
+}
+#else
 int sysctl_slide_boost_enabled = 0;
+#endif
 int sysctl_boost_task_threshold = 51;
 int sysctl_frame_rate = 60;
 int sched_frame_rate_handler(struct ctl_table *table, int write, void __user *buffer, size_t *lenp, loff_t *ppos)
@@ -1780,13 +1865,44 @@ static struct ctl_table kern_table[] = {
 	},
 #endif /* OPLUS_FEATURE_SCHED_ASSIST */
 #ifdef OPLUS_FEATURE_SCHED_ASSIST
+#ifdef CONFIG_OPLUS_FEATURE_FRAME_BOOST
+	{
+		.procname	= "frame_boost_enabled",
+		.data		= &sysctl_frame_boost_enable,
+		.maxlen 	= sizeof(unsigned int),
+		.mode		= 0666,
+		.proc_handler   = proc_dointvec,
+	},
+	{
+		.procname	= "frame_boost_debug",
+		.data		= &sysctl_frame_boost_debug,
+		.maxlen 	= sizeof(unsigned int),
+		.mode		= 0666,
+		.proc_handler   = proc_dointvec,
+	},
 	{
 		.procname	= "slide_boost_enabled",
 		.data		= &sysctl_slide_boost_enabled,
 		.maxlen 	= sizeof(int),
 		.mode		= 0666,
-		.proc_handler = proc_dointvec,
+		.proc_handler   = slide_boost_ctrl_handler,
 	},
+	{
+		.procname       = "input_boost_enabled",
+		.data           = &sysctl_input_boost_enabled,
+		.maxlen         = sizeof(int),
+		.mode           = 0666,
+		.proc_handler = input_boost_ctrl_handler,
+	},
+#else
+	{
+		.procname	= "slide_boost_enabled",
+		.data		= &sysctl_slide_boost_enabled,
+		.maxlen 	= sizeof(int),
+		.mode		= 0666,
+		.proc_handler   = proc_dointvec,
+	},
+#endif
 	{
 		.procname	= "boost_task_threshold",
 		.data		= &sysctl_boost_task_threshold,
@@ -2080,6 +2196,28 @@ static struct ctl_table vm_table[] = {
 		.extra1		= &one,
 		.extra2		= &four,
 	},
+#if defined(CONFIG_OPLUS_UXMEM_OPT)
+	{
+		.procname	= "ux_page_pool_enable",
+		.data		= &ux_page_pool_enable,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= ux_page_pool_enable_handler,
+		.extra1		= &zero,
+		.extra2		= &one,
+	},
+#endif /* OPLUS_UXMEM_OPT */
+#if defined(CONFIG_OPLUS_DYNAMIC_READAHEAD)
+	{
+		.procname       = "dynamic_readahead_enable",
+		.data           = &dynamic_readahead_enable,
+		.maxlen         = sizeof(dynamic_readahead_enable),
+		.mode           = 0644,
+		.proc_handler   = proc_dointvec_minmax,
+		.extra1         = &zero,
+		.extra2         = &one,
+	},
+#endif
 #ifdef CONFIG_COMPACTION
 	{
 		.procname	= "compact_memory",

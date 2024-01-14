@@ -1416,7 +1416,7 @@ compress_again:
 	zram_set_handle(zram, index, handle);
 	zram_set_obj_size(zram, index, comp_len);
 #ifdef CONFIG_HYBRIDSWAP_CORE
-	hybridswap_record(zram, index, page->mem_cgroup);
+	hybridswap_track(zram, index, page->mem_cgroup);
 #endif
 	zram_slot_unlock(zram, index);
 
@@ -1437,13 +1437,13 @@ static int __zram_bvec_read(struct zram *zram, struct page *page, u32 index,
 
 	zram_slot_lock(zram, index);
 #ifdef CONFIG_HYBRIDSWAP_ASYNC_COMPRESS
-	if (akcompress_cache_page_fault(zram, page, index))
+	if (akcompress_cache_fault_out(zram, page, index))
 		return 0;
 #endif
 
 #ifdef CONFIG_HYBRIDSWAP_CORE
 	if (likely(!bio)) {
-		ret = hybridswap_page_fault(zram, index);
+		ret = hybridswap_fault_out(zram, index);
 		if (unlikely(ret)) {
 			pr_err("search in hybridswap failed! err=%d, page=%u\n",
 					ret, index);
@@ -1675,7 +1675,7 @@ out:
 	}
 
 #ifdef CONFIG_HYBRIDSWAP_CORE
-	hybridswap_record(zram, index, page->mem_cgroup);
+	hybridswap_track(zram, index, page->mem_cgroup);
 #endif
 	zram_slot_unlock(zram, index);
 

@@ -2527,7 +2527,9 @@ static void ipa3_replenish_rx_cache_recycle(struct ipa3_sys_context *sys)
 fail_dma_mapping:
 	spin_lock_bh(&sys->spinlock);
 	list_add_tail(&rx_pkt->link, &sys->rcycl_list);
-	INIT_LIST_HEAD(&rx_pkt->link);
+	//ifdef OPLUS_BUG_COMPATIBILITY
+	//INIT_LIST_HEAD(&rx_pkt->link);
+	//endif /* OPLUS_BUG_COMPATIBILITY */
 	spin_unlock_bh(&sys->spinlock);
 fail_kmem_cache_alloc:
 	if (rx_len_cached == 0)

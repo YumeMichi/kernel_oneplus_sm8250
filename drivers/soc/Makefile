@@ -26,6 +26,7 @@ obj-$(CONFIG_PLAT_VERSATILE)	+= versatile/
 obj-y				+= xilinx/
 obj-$(CONFIG_ARCH_ZX)		+= zte/
 obj-y                           += oplus/
+obj-y				+= oplus/storage/
 #ifdef VENDOR_EDIT
 obj-$(CONFIG_OPLUS_SYSTEM_KERNEL)	+= oplus/system/
 #endif /* VENDOR_EDIT */
@@ -74,3 +75,7 @@ obj-$(CONFIG_NANDSWAP)		+= oplus/oplus_nandswap/
 #ifdef OPLUS_FEATURE_GAME_OPT
 obj-$(CONFIG_OPLUS_FEATURE_GAME_OPT) += oplus/game_opt/
 #endif /* OPLUS_FEATURE_GAME_OPT */
+
+#ifdef OPLUS_FEATURE_ABNORMAL_FLAG
+obj-$(CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG) += oplus/oplus_overload/
+#endif

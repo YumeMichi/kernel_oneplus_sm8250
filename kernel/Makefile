@@ -138,11 +138,9 @@ obj-$(CONFIG_RSEQ) += rseq.o
 
 #ifdef OPLUS_FEATURE_SCHED_ASSIST
 obj-y += sched_assist/
+obj-$(CONFIG_OPLUS_FEATURE_FRAME_BOOST) += tuning/
+obj-$(CONFIG_UA_KERNEL_CPU_IOCTL) += uad/
 #endif /* OPLUS_FEATURE_SCHED_ASSIST */
-
-#ifdef OPLUS_FEATURE_INPUT_BOOST_V4
-obj-$(CONFIG_OPLUS_FEATURE_INPUT_BOOST_V4) += tuning/
-#endif /* OPLUS_FEATURE_INPUT_BOOST_V4 */
 
 #ifdef OPLUS_FEATURE_SCHED_ASSIST
 obj-y += special_opt/
@@ -167,3 +165,5 @@ $(obj)/kheaders_data.tar.xz: FORCE
 	$(call cmd,genikh)
 
 clean-files := kheaders_data.tar.xz kheaders.md5
+
+obj-$(CONFIG_OPLUS_FEATURE_SIGKILL_DIAGNOSIS) += sigkill_diagnosis/

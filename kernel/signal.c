@@ -68,6 +68,10 @@
 #include <linux/sched_assist/sched_assist_common.h>
 #endif /* OPLUS_FEATURE_SCHED_ASSIST */
 
+#ifdef CONFIG_OPLUS_FEATURE_SIGKILL_DIAGNOSIS
+#include <linux/sigkill_diagnosis/sigkill_diagnosis.h>
+#endif /* CONFIG_OPLUS_FEATURE_SIGKILL_DIAGNOSIS */
+
 /*
  * SLAB caches for signal bits.
  */
@@ -1310,6 +1314,9 @@ int do_send_sig_info(int sig, struct siginfo *info, struct task_struct *p,
 {
 	unsigned long flags;
 	int ret = -ESRCH;
+#ifdef CONFIG_OPLUS_FEATURE_SIGKILL_DIAGNOSIS
+	record_sigkill_reason(NULL, sig, current, p);
+#endif
 
 #ifdef OPLUS_FEATURE_HANS_FREEZE
 	if (is_frozen_tg(p)  /*signal receiver thread group is frozen?*/
@@ -1437,6 +1444,8 @@ struct sighand_struct *__lock_task_sighand(struct task_struct *tsk,
 	return sighand;
 }
 
+#define REAPER_SZ (SZ_1M * 32 / PAGE_SIZE)
+
 /*
  * send signal info to all the members of a group
  */
@@ -1452,6 +1461,20 @@ int group_send_sig_info(int sig, struct siginfo *info, struct task_struct *p,
 	if (!ret && sig) {
 		check_panic_on_foreground_kill(p);
 		ret = do_send_sig_info(sig, info, p, type);
+#ifdef CONFIG_OOM_REAPER_RECLAIM_MEMORY
+		if (!ret && sig == SIGKILL) {
+			unsigned long pages = 0;
+
+			task_lock(p);
+			if (p->mm)
+				pages = get_mm_counter(p->mm, MM_ANONPAGES) +
+					get_mm_counter(p->mm, MM_SWAPENTS);
+			task_unlock(p);
+
+			if (pages > REAPER_SZ)
+				add_to_oom_reaper(p);
+		}
+#endif /* CONFIG_OOM_REAPER_RECLAIM_MEMORY */
 		if (capable(CAP_KILL) && sig == SIGKILL) {
 			if (!strcmp(current->comm, ULMK_MAGIC) ||
 			    !strcmp(current->comm, ATHENA_KILLER_MAGIC))
