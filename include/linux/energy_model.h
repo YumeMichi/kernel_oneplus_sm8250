@@ -110,7 +110,7 @@ static inline unsigned long em_pd_energy(struct em_perf_domain *pd,
 	cpu = cpumask_first(to_cpumask(pd->cpus));
 	scale_cpu = arch_scale_cpu_capacity(cpu);
 	cs = &pd->table[pd->nr_cap_states - 1];
-	freq = map_util_freq(max_util, cs->frequency, scale_cpu, cpu);
+	freq = map_util_freq(max_util, cs->frequency, scale_cpu);
 
 	/*
 	 * Find the lowest capacity state of the Energy Model above the
